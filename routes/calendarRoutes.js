@@ -161,12 +161,15 @@ router.get("/events/:userEmail", async (req, res) => {
       events,
     });
   } catch (error) {
-    console.error("Get calendar events error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
+  console.error("FULL ERROR:", error);
+
+  return res.status(500).json({
+    success: false,
+    message: "Server error",
+    error: error.message,
+    details: error,
+  });
+}
 });
 
 module.exports = router;
