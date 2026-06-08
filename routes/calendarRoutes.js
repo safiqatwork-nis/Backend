@@ -1,7 +1,18 @@
 const express = require("express");
+const { google } = require("googleapis");
+
 const CalendarEvent = require("../models/CalendarEvent");
+const GoogleToken = require("../models/GoogleToken");
 
 const router = express.Router();
+
+function createOAuthClient() {
+  return new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+  );
+}
 
 router.post("/create", async (req, res) => {
   try {
@@ -27,8 +38,10 @@ router.post("/create", async (req, res) => {
       });
     }
 
+    const normalizedEmail = userEmail.toLowerCase();
+
     const conflict = await CalendarEvent.findOne({
-      userEmail: userEmail.toLowerCase(),
+      userEmail: normalizedEmail,
       startDateTime: { $lt: new Date(endDateTime) },
       endDateTime: { $gt: new Date(startDateTime) },
     });
@@ -42,9 +55,71 @@ router.post("/create", async (req, res) => {
       });
     }
 
+    const googleToken = await GoogleToken.findOne({
+      userEmail: normalizedEmail,
+    });
+
+    if (!googleToken) {
+      return res.status(401).json({
+        success: false,
+        message: "Google Calendar is not connected for this email",
+      });
+    }
+
+    const oauth2Client = createOAuthClient();
+
+    oauth2Client.setCredentials({
+      access_token: googleToken.accessToken,
+      refresh_token: googleToken.refreshToken,
+      expiry_date: googleToken.expiryDate,
+      token_type: googleToken.tokenType,
+      scope: googleToken.scope,
+    });
+
+    const calendar = google.calendar({
+      version: "v3",
+      auth: oauth2Client,
+    });
+
+    const googleEventPayload = {
+      summary: title,
+      description: description || "",
+      location: location || "",
+      start: {
+        dateTime: new Date(startDateTime).toISOString(),
+        timeZone: "Asia/Kolkata",
+      },
+      end: {
+        dateTime: new Date(endDateTime).toISOString(),
+        timeZone: "Asia/Kolkata",
+      },
+      attendees: Array.isArray(attendees)
+        ? attendees
+            .filter((email) => email && String(email).trim() !== "")
+            .map((email) => ({ email }))
+        : [],
+    };
+
+    if (recurrenceRule && recurrenceRule.trim() !== "") {
+      googleEventPayload.recurrence = [recurrenceRule];
+    }
+
+    if (videoLink && videoLink.trim() !== "") {
+      googleEventPayload.description =
+        `${description || ""}\n\nVideo Link: ${videoLink}`.trim();
+    }
+
+    const googleResponse = await calendar.events.insert({
+      calendarId: "primary",
+      requestBody: googleEventPayload,
+      sendUpdates: "all",
+    });
+
     const event = await CalendarEvent.create({
-      userEmail,
+      userEmail: normalizedEmail,
       taskId: taskId || "",
+      googleEventId: googleResponse.data.id || "",
+      calendarId: "primary",
       title,
       description: description || "",
       location: location || "",
@@ -55,19 +130,22 @@ router.post("/create", async (req, res) => {
       attendees: attendees || [],
       videoLink: videoLink || "",
       recurrenceRule: recurrenceRule || "",
-      syncStatus: "local",
+      syncStatus: "google_synced",
     });
 
     return res.status(201).json({
       success: true,
-      message: "Calendar event created",
+      message: "Calendar event created and synced with Google Calendar",
       event,
+      googleEvent: googleResponse.data,
     });
   } catch (error) {
     console.error("Create calendar event error:", error);
+
     return res.status(500).json({
       success: false,
-      message: "Server error",
+      message: "Server error while creating Google Calendar event",
+      error: error.message,
     });
   }
 });
