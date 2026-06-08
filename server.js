@@ -5,6 +5,8 @@ require("dotenv").config();
 
 const authRoutes = require("./routes/authRoutes");
 const taskRoutes = require("./routes/taskRoutes");
+const calendarRoutes = require("./routes/calendarRoutes");
+
 
 const app = express();
 
@@ -18,6 +20,7 @@ app.get("/", (req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api/tasks", taskRoutes);
+app.use("/api/calendar", calendarRoutes);
 
 mongoose.connect(process.env.MONGO_URI)
 .then(() => {
