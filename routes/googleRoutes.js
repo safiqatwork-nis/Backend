@@ -71,4 +71,27 @@ router.get("/callback", async (req, res) => {
   }
 });
 
+router.get("/status/:email", async (req, res) => {
+  try {
+    const email = req.params.email.toLowerCase();
+
+    const token = await GoogleToken.findOne({
+      userEmail: email,
+    });
+
+    return res.json({
+      success: true,
+      connected: !!token,
+      email,
+    });
+  } catch (error) {
+    console.error("Google status error:", error);
+    return res.status(500).json({
+      success: false,
+      connected: false,
+      message: "Server error",
+    });
+  }
+});
+
 module.exports = router;

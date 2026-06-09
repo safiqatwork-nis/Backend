@@ -172,4 +172,110 @@ router.get("/events/:userEmail", async (req, res) => {
 }
 });
 
+router.get("/sync/:userEmail", async (req, res) => {
+  try {
+    const userEmail = req.params.userEmail.toLowerCase();
+
+    const googleToken = await GoogleToken.findOne({
+      userEmail,
+    });
+
+    if (!googleToken) {
+      return res.status(401).json({
+        success: false,
+        message: "Google Calendar is not connected for this email",
+      });
+    }
+
+    const oauth2Client = createOAuthClient();
+
+    oauth2Client.setCredentials({
+      access_token: googleToken.accessToken,
+      refresh_token: googleToken.refreshToken,
+      expiry_date: googleToken.expiryDate,
+      token_type: googleToken.tokenType,
+      scope: googleToken.scope,
+    });
+
+    const calendar = google.calendar({
+      version: "v3",
+      auth: oauth2Client,
+    });
+
+    const now = new Date();
+    const sixMonthsLater = new Date();
+    sixMonthsLater.setMonth(sixMonthsLater.getMonth() + 6);
+
+    const googleEvents = await calendar.events.list({
+      calendarId: "primary",
+      timeMin: now.toISOString(),
+      timeMax: sixMonthsLater.toISOString(),
+      singleEvents: true,
+      orderBy: "startTime",
+    });
+
+    const items = googleEvents.data.items || [];
+
+    for (const item of items) {
+      if (!item.id || !item.summary) continue;
+
+      const start =
+        item.start?.dateTime || item.start?.date;
+
+      const end =
+        item.end?.dateTime || item.end?.date;
+
+      if (!start || !end) continue;
+
+      await CalendarEvent.findOneAndUpdate(
+        {
+          userEmail,
+          googleEventId: item.id,
+        },
+        {
+          userEmail,
+          googleEventId: item.id,
+          calendarId: "primary",
+          title: item.summary || "Untitled Event",
+          description: item.description || "",
+          location: item.location || "",
+          category: "Google Calendar",
+          priority: "Medium",
+          startDateTime: new Date(start),
+          endDateTime: new Date(end),
+          attendees: item.attendees
+            ? item.attendees.map((a) => a.email).filter(Boolean)
+            : [],
+          videoLink: item.hangoutLink || "",
+          recurrenceRule: item.recurrence ? item.recurrence.join(",") : "",
+          syncStatus: "google_synced",
+        },
+        {
+          upsert: true,
+          returnDocument: "after",
+        }
+      );
+    }
+
+    const syncedEvents = await CalendarEvent.find({
+      userEmail,
+    }).sort({ startDateTime: 1 });
+
+    return res.json({
+      success: true,
+      message: "Google Calendar synced successfully",
+      syncedCount: items.length,
+      events: syncedEvents,
+    });
+  } catch (error) {
+    console.error("Google calendar sync error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Google calendar sync failed",
+      error: error.message,
+    });
+  }
+});
+
 module.exports = router;
