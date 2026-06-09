@@ -17,19 +17,22 @@ function createOAuthClient() {
 router.post("/create", async (req, res) => {
   try {
     const {
-      userEmail,
-      taskId,
-      title,
-      description,
-      location,
-      category,
-      priority,
-      startDateTime,
-      endDateTime,
-      attendees,
-      videoLink,
-      recurrenceRule,
-    } = req.body;
+  userEmail,
+  taskId,
+  title,
+  description,
+  location,
+  category,
+  priority,
+  startDateTime,
+  endDateTime,
+  attendees,
+  videoLink,
+  recurrenceRule,
+  calendarId,
+} = req.body;
+
+const targetCalendarId = calendarId || "primary";
 
     if (!userEmail || !title || !startDateTime || !endDateTime) {
       return res.status(400).json({
@@ -110,7 +113,7 @@ router.post("/create", async (req, res) => {
     }
 
     const googleResponse = await calendar.events.insert({
-      calendarId: "primary",
+      calendarId: targetCalendarId,
       requestBody: googleEventPayload,
       sendUpdates: "all",
     });
@@ -119,7 +122,7 @@ router.post("/create", async (req, res) => {
       userEmail: normalizedEmail,
       taskId: taskId || "",
       googleEventId: googleResponse.data.id || "",
-      calendarId: "primary",
+      calendarId: targetCalendarId,
       title,
       description: description || "",
       location: location || "",
@@ -273,6 +276,63 @@ router.get("/sync/:userEmail", async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Google calendar sync failed",
+      error: error.message,
+    });
+  }
+});
+
+router.get("/google-calendars/:userEmail", async (req, res) => {
+  try {
+    const userEmail = req.params.userEmail.toLowerCase();
+
+    const googleToken = await GoogleToken.findOne({
+      userEmail,
+    });
+
+    if (!googleToken) {
+      return res.status(401).json({
+        success: false,
+        message: "Google Calendar is not connected for this email",
+      });
+    }
+
+    const oauth2Client = createOAuthClient();
+
+    oauth2Client.setCredentials({
+      access_token: googleToken.accessToken,
+      refresh_token: googleToken.refreshToken,
+      expiry_date: googleToken.expiryDate,
+      token_type: googleToken.tokenType,
+      scope: googleToken.scope,
+    });
+
+    const calendar = google.calendar({
+      version: "v3",
+      auth: oauth2Client,
+    });
+
+    const calendarList = await calendar.calendarList.list();
+
+    const calendars = (calendarList.data.items || []).map((item) => ({
+      id: item.id,
+      summary: item.summary,
+      description: item.description || "",
+      primary: item.primary || false,
+      accessRole: item.accessRole || "",
+      backgroundColor: item.backgroundColor || "",
+      foregroundColor: item.foregroundColor || "",
+    }));
+
+    return res.json({
+      success: true,
+      calendars,
+    });
+  } catch (error) {
+    console.error("Google calendars list error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to load Google calendars",
       error: error.message,
     });
   }
