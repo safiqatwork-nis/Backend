@@ -30,6 +30,7 @@ router.post("/create", async (req, res) => {
   videoLink,
   recurrenceRule,
   calendarId,
+  colorId,
 } = req.body;
 
 const targetCalendarId = calendarId || "primary";
@@ -85,9 +86,16 @@ const targetCalendarId = calendarId || "primary";
     });
 
     const googleEventPayload = {
+      colorId: colorId || "1",
       summary: title,
       description: description || "",
       location: location || "",
+      extendedProperties: {
+      private: {
+      category: category || "General",
+      priority: priority || "Medium",
+      },
+      },
       start: {
         dateTime: new Date(startDateTime).toISOString(),
         timeZone: "Asia/Kolkata",
@@ -128,6 +136,7 @@ const targetCalendarId = calendarId || "primary";
       location: location || "",
       category: category || "General",
       priority: priority || "Medium",
+      colorId: colorId || "1",
       startDateTime,
       endDateTime,
       attendees: attendees || [],
@@ -242,8 +251,9 @@ router.get("/sync/:userEmail", async (req, res) => {
           title: item.summary || "Untitled Event",
           description: item.description || "",
           location: item.location || "",
-          category: "Google Calendar",
-          priority: "Medium",
+          category: item.extendedProperties?.private?.category || "Google Calendar",
+          priority: item.extendedProperties?.private?.priority || "Medium",
+          colorId: item.colorId || "1",
           startDateTime: new Date(start),
           endDateTime: new Date(end),
           attendees: item.attendees
