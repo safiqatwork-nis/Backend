@@ -226,7 +226,21 @@ router.get("/sync/:userEmail", async (req, res) => {
       orderBy: "startTime",
     });
 
-    const items = googleEvents.data.items || [];
+    const holidayEvents = await calendar.events.list({
+      calendarId: "en.indian#holiday@group.v.calendar.google.com",
+      timeMin: now.toISOString(),
+      timeMax: sixMonthsLater.toISOString(),
+      singleEvents: true,
+      orderBy: "startTime",
+     });
+
+    const userItems = googleEvents.data.items || [];
+    const holidayItems = (holidayEvents.data.items || []).map((item) => ({
+      ...item,
+      isHoliday: true,
+     }));
+
+     const items = [...userItems, ...holidayItems];
 
     for (const item of items) {
       if (!item.id || !item.summary) continue;
@@ -247,13 +261,19 @@ router.get("/sync/:userEmail", async (req, res) => {
         {
           userEmail,
           googleEventId: item.id,
-          calendarId: "primary",
+          calendarId: item.isHoliday
+            ? "en.indian#holiday@group.v.calendar.google.com"
+            : "primary",
           title: item.summary || "Untitled Event",
           description: item.description || "",
           location: item.location || "",
-          category: item.extendedProperties?.private?.category || "Google Calendar",
-          priority: item.extendedProperties?.private?.priority || "Medium",
-          colorId: item.colorId || "1",
+          category: item.isHoliday
+            ? "Holiday"
+            : item.extendedProperties?.private?.category || "Google Calendar",
+          priority: item.isHoliday
+            ? "Low"
+            : item.extendedProperties?.private?.priority || "Medium",
+          colorId: item.isHoliday ? "11" : item.colorId || "1",
           startDateTime: new Date(start),
           endDateTime: new Date(end),
           attendees: item.attendees
