@@ -7,6 +7,7 @@ const authRoutes = require("./routes/authRoutes");
 const taskRoutes = require("./routes/taskRoutes");
 const calendarRoutes = require("./routes/calendarRoutes");
 const googleRoutes = require("./routes/googleRoutes");
+const eventRoutes = require("./routes/eventRoutes");
 
 
 const app = express();
@@ -19,6 +20,7 @@ app.get("/", (req, res) => {
   res.send("My Biz API Running");
 });
 
+app.use("/api/events", eventRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/calendar", calendarRoutes);
