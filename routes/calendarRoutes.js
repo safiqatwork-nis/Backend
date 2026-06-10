@@ -427,6 +427,11 @@ router.post("/watch/start", async (req, res) => {
       },
     });
 
+    await CalendarWatch.deleteMany({
+  userEmail: normalizedEmail,
+  calendarId: targetCalendarId,
+});
+
     await CalendarWatch.create({
       userEmail: normalizedEmail,
       calendarId: targetCalendarId,
