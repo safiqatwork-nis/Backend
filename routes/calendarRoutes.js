@@ -416,6 +416,33 @@ router.post("/watch/start", async (req, res) => {
       auth: oauth2Client,
     });
 
+
+
+
+    const oldWatches = await CalendarWatch.find({
+  userEmail: normalizedEmail,
+  calendarId: targetCalendarId,
+});
+
+for (const oldWatch of oldWatches) {
+  try {
+    await calendar.channels.stop({
+      requestBody: {
+        id: oldWatch.channelId,
+        resourceId: oldWatch.resourceId,
+      },
+    });
+  } catch (e) {
+    console.log("Old watch stop skipped:", e.message);
+  }
+}
+
+
+    await CalendarWatch.deleteMany({
+  userEmail: normalizedEmail,
+  calendarId: targetCalendarId,
+});
+
     const channelId = crypto.randomUUID();
 
     const response = await calendar.events.watch({
@@ -427,10 +454,6 @@ router.post("/watch/start", async (req, res) => {
       },
     });
 
-    await CalendarWatch.deleteMany({
-  userEmail: normalizedEmail,
-  calendarId: targetCalendarId,
-});
 
     await CalendarWatch.create({
       userEmail: normalizedEmail,

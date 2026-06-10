@@ -57,7 +57,7 @@ router.get("/callback", async (req, res) => {
         tokenType: tokens.token_type || "",
         expiryDate: tokens.expiry_date || 0,
       },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: "after" }
     );
 
     res.send(`
