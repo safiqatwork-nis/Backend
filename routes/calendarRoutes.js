@@ -130,6 +130,7 @@ const targetCalendarId = calendarId || "primary";
       userEmail: normalizedEmail,
       taskId: taskId || "",
       googleEventId: googleResponse.data.id || "",
+      htmlLink: googleResponse.data.htmlLink || "",
       calendarId: targetCalendarId,
       title,
       description: description || "",
@@ -261,6 +262,7 @@ router.get("/sync/:userEmail", async (req, res) => {
         {
           userEmail,
           googleEventId: item.id,
+          htmlLink: item.htmlLink || "",
           calendarId: item.isHoliday
             ? "en.indian#holiday@group.v.calendar.google.com"
             : "primary",

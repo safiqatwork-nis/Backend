@@ -74,6 +74,11 @@ const calendarEventSchema = new mongoose.Schema(
       default: "",
     },
 
+    htmlLink: {
+      type: String,
+      default: "",
+    },
+
     syncStatus: {
       type: String,
       enum: ["local", "google_synced", "failed"],
