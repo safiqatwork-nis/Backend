@@ -6,6 +6,10 @@ const GoogleToken = require("../models/GoogleToken");
 
 const router = express.Router();
 
+const crypto = require("crypto");
+const CalendarWatch = require("../models/CalendarWatch");
+
+
 function createOAuthClient() {
   return new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
@@ -369,5 +373,206 @@ router.get("/google-calendars/:userEmail", async (req, res) => {
     });
   }
 });
+
+
+
+router.post("/watch/start", async (req, res) => {
+  try {
+    const { userEmail, calendarId } = req.body;
+
+    if (!userEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "userEmail is required",
+      });
+    }
+
+    const normalizedEmail = userEmail.toLowerCase();
+    const targetCalendarId = calendarId || "primary";
+
+    const googleToken = await GoogleToken.findOne({
+      userEmail: normalizedEmail,
+    });
+
+    if (!googleToken) {
+      return res.status(401).json({
+        success: false,
+        message: "Google Calendar is not connected for this email",
+      });
+    }
+
+    const oauth2Client = createOAuthClient();
+
+    oauth2Client.setCredentials({
+      access_token: googleToken.accessToken,
+      refresh_token: googleToken.refreshToken,
+      expiry_date: googleToken.expiryDate,
+      token_type: googleToken.tokenType,
+      scope: googleToken.scope,
+    });
+
+    const calendar = google.calendar({
+      version: "v3",
+      auth: oauth2Client,
+    });
+
+    const channelId = crypto.randomUUID();
+
+    const response = await calendar.events.watch({
+      calendarId: targetCalendarId,
+      requestBody: {
+        id: channelId,
+        type: "web_hook",
+        address: "https://my-biz-backend.onrender.com/api/calendar/webhook",
+      },
+    });
+
+    await CalendarWatch.create({
+      userEmail: normalizedEmail,
+      calendarId: targetCalendarId,
+      channelId,
+      resourceId: response.data.resourceId || "",
+      expiration: Number(response.data.expiration || 0),
+    });
+
+    return res.json({
+      success: true,
+      message: "Google Calendar watch started",
+      watch: response.data,
+    });
+  } catch (error) {
+    console.error("Watch start error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to start Google Calendar watch",
+      error: error.message,
+    });
+  }
+});
+
+
+
+
+
+router.post("/webhook", async (req, res) => {
+  try {
+    const channelId = req.headers["x-goog-channel-id"];
+    const resourceState = req.headers["x-goog-resource-state"];
+
+    if (!channelId) {
+      return res.status(400).send("Missing channel id");
+    }
+
+    const watch = await CalendarWatch.findOne({
+      channelId,
+    });
+
+    if (!watch) {
+      return res.status(200).send("Unknown watch ignored");
+    }
+
+    if (resourceState === "sync") {
+      return res.status(200).send("Initial sync notification received");
+    }
+
+    await syncGoogleCalendarToMongo(
+      watch.userEmail,
+      watch.calendarId || "primary"
+    );
+
+    return res.status(200).send("Webhook synced");
+  } catch (error) {
+    console.error("Calendar webhook error:", error);
+    return res.status(200).send("Webhook received with error");
+  }
+});
+
+
+
+
+
+async function syncGoogleCalendarToMongo(userEmail, calendarId = "primary") {
+  const googleToken = await GoogleToken.findOne({
+    userEmail: userEmail.toLowerCase(),
+  });
+
+  if (!googleToken) {
+    throw new Error("Google Calendar is not connected for this email");
+  }
+
+  const oauth2Client = createOAuthClient();
+
+  oauth2Client.setCredentials({
+    access_token: googleToken.accessToken,
+    refresh_token: googleToken.refreshToken,
+    expiry_date: googleToken.expiryDate,
+    token_type: googleToken.tokenType,
+    scope: googleToken.scope,
+  });
+
+  const calendar = google.calendar({
+    version: "v3",
+    auth: oauth2Client,
+  });
+
+  const now = new Date();
+  const sixMonthsLater = new Date();
+  sixMonthsLater.setMonth(sixMonthsLater.getMonth() + 6);
+
+  const googleEvents = await calendar.events.list({
+    calendarId,
+    timeMin: now.toISOString(),
+    timeMax: sixMonthsLater.toISOString(),
+    singleEvents: true,
+    orderBy: "startTime",
+  });
+
+  const items = googleEvents.data.items || [];
+
+  for (const item of items) {
+    if (!item.id || !item.summary) continue;
+
+    const start = item.start?.dateTime || item.start?.date;
+    const end = item.end?.dateTime || item.end?.date;
+
+    if (!start || !end) continue;
+
+    await CalendarEvent.findOneAndUpdate(
+      {
+        userEmail: userEmail.toLowerCase(),
+        googleEventId: item.id,
+      },
+      {
+        userEmail: userEmail.toLowerCase(),
+        googleEventId: item.id,
+        htmlLink: item.htmlLink || "",
+        calendarId,
+        title: item.summary || "Untitled Event",
+        description: item.description || "",
+        location: item.location || "",
+        category:
+          item.extendedProperties?.private?.category || "Google Calendar",
+        priority:
+          item.extendedProperties?.private?.priority || "Medium",
+        colorId: item.colorId || "1",
+        startDateTime: new Date(start),
+        endDateTime: new Date(end),
+        attendees: item.attendees
+          ? item.attendees.map((a) => a.email).filter(Boolean)
+          : [],
+        videoLink: item.hangoutLink || "",
+        recurrenceRule: item.recurrence ? item.recurrence.join(",") : "",
+        syncStatus: "google_synced",
+      },
+      {
+        upsert: true,
+        returnDocument: "after",
+      }
+    );
+  }
+
+  return items.length;
+}
 
 module.exports = router;
