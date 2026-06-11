@@ -651,4 +651,54 @@ router.post("/tickets/check-in/:ticketId", async (req, res) => {
   }
 });
 
+// ================================
+// USER APP: CANCEL BOOKING
+// ================================
+router.post("/booking/cancel", async (req, res) => {
+  try {
+    const { bookingId, userEmail } = req.body;
+
+    if (!bookingId || !userEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "bookingId and userEmail are required",
+      });
+    }
+
+    const booking = await EventBooking.findOne({
+      _id: bookingId,
+      userEmail,
+      bookingStatus: "booked",
+    });
+
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: "Booking not found",
+      });
+    }
+
+    if (booking.checkedIn) {
+      return res.status(400).json({
+        success: false,
+        message: "Checked-in ticket cannot be cancelled",
+      });
+    }
+
+    booking.bookingStatus = "cancelled";
+    await booking.save();
+
+    res.json({
+      success: true,
+      message: "Booking cancelled successfully",
+      booking,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
 module.exports = router;
