@@ -149,15 +149,21 @@ router.delete("/admin/delete/:id", async (req, res) => {
 // ================================
 router.get("/feed", async (req, res) => {
   try {
-    const { district } = req.query;
+    const { search } = req.query;
 
-  const filter = {
-  status: { $in: ["published", "cancelled"] },
-  startDateTime: { $gte: new Date() },
-};
+    const filter = {
+      status: { $in: ["published", "cancelled"] },
+      startDateTime: { $gte: new Date() },
+    };
 
-    if (district) {
-      filter.district = new RegExp(`^${district}$`, "i");
+    if (search && search.trim() !== "") {
+      filter.$or = [
+        { title: new RegExp(search, "i") },
+        { district: new RegExp(search, "i") },
+        { city: new RegExp(search, "i") },
+        { venue: new RegExp(search, "i") },
+        { eventType: new RegExp(search, "i") },
+      ];
     }
 
     const events = await Event.find(filter).sort({ startDateTime: 1 });
