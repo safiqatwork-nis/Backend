@@ -762,14 +762,15 @@ export default function Home() {
                             </div>
 
                             <div className="flex flex-wrap gap-2">
-                              <StatusBadge label={booking.paymentStatus} />
-                              <StatusBadge
-                                label={
-                                  booking.checkedIn
-                                    ? "checked-in"
-                                    : "not checked-in"
-                                }
-                              />
+                              <StatusBadge label={booking.bookingStatus} />
+<StatusBadge label={booking.paymentStatus} />
+<StatusBadge
+  label={
+    booking.checkedIn
+      ? "checked-in"
+      : "not checked-in"
+  }
+/>
                             </div>
                           </div>
 
@@ -806,13 +807,26 @@ function StatCard({ title, value }) {
 function StatusBadge({ label }) {
   const text = String(label || "").toUpperCase();
 
-  const isGood = text.includes("PAID") || text.includes("CHECKED");
-  const isPending = text.includes("PENDING") || text.includes("NOT");
+  const isGood =
+    text.includes("PAID") ||
+    text.includes("CHECKED") ||
+    text.includes("BOOKED");
+
+  const isPending =
+    text.includes("PENDING") ||
+    text.includes("NOT");
+
+  const isDanger =
+    text.includes("CANCELLED") ||
+    text.includes("FAILED") ||
+    text.includes("REFUNDED");
 
   return (
     <span
       className={`rounded-full px-3 py-1 text-xs font-black ${
-        isGood
+        isDanger
+          ? "bg-red-100 text-red-700"
+          : isGood
           ? "bg-green-100 text-green-700"
           : isPending
           ? "bg-yellow-100 text-yellow-700"
