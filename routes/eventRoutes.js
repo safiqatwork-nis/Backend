@@ -151,10 +151,10 @@ router.get("/feed", async (req, res) => {
   try {
     const { district } = req.query;
 
-    const filter = {
-      status: "published",
-      startDateTime: { $gte: new Date() },
-    };
+  const filter = {
+  status: { $in: ["published", "cancelled"] },
+  startDateTime: { $gte: new Date() },
+};
 
     if (district) {
       filter.district = new RegExp(`^${district}$`, "i");
