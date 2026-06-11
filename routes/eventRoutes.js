@@ -153,7 +153,7 @@ router.get("/feed", async (req, res) => {
 
     const filter = {
       status: { $in: ["published", "cancelled"] },
-      startDateTime: { $gte: new Date() },
+     // startDateTime: { $gte: new Date() },
     };
 
     if (search && search.trim() !== "") {
