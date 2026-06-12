@@ -744,6 +744,7 @@ export default function Home() {
                   ) : (
                     <div className="grid gap-3">
                       {bookings.map((booking) => (
+                        
                         <div
                           key={booking._id}
                           className="rounded-3xl border border-slate-200 p-5 bg-slate-50"
@@ -776,6 +777,38 @@ export default function Home() {
 />
                             </div>
                           </div>
+
+                          <div className="mt-3 flex flex-wrap gap-2">
+  <button
+    onClick={() => {
+      navigator.clipboard.writeText(booking.ticketId);
+      alert("Ticket ID copied");
+    }}
+    className="px-3 py-2 rounded-xl bg-slate-200 text-slate-700 text-xs font-black"
+  >
+    Copy Ticket ID
+  </button>
+
+  <a
+    href={booking.qrVerifyUrl}
+    target="_blank"
+    rel="noreferrer"
+    className="px-3 py-2 rounded-xl bg-indigo-600 text-white text-xs font-black"
+  >
+    Verify Ticket
+  </a>
+
+  {booking.googleHtmlLink && (
+    <a
+      href={booking.googleHtmlLink}
+      target="_blank"
+      rel="noreferrer"
+      className="px-3 py-2 rounded-xl bg-blue-600 text-white text-xs font-black"
+    >
+      Google Calendar
+    </a>
+  )}
+</div>
 
                           {booking.checkedIn && (
                             <p className="mt-3 text-sm text-green-700 font-bold flex items-center gap-2">
