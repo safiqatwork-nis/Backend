@@ -6,7 +6,19 @@ const EventBooking = require("../models/EventBooking");
 
 const router = express.Router();
 
+const { google } = require("googleapis");
+const GoogleToken = require("../models/GoogleToken");
+const CalendarEvent = require("../models/CalendarEvent");
+
 const BASE_URL = process.env.BASE_URL || "https://my-biz-backend.onrender.com";
+
+function createOAuthClient() {
+  return new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+  );
+}
 
 // ================================
 // ADMIN: CREATE EVENT
@@ -309,7 +321,7 @@ router.post("/payment/success", async (req, res) => {
   try {
     const { bookingId } = req.body;
 
-    const booking = await EventBooking.findByIdAndUpdate(
+    let booking = await EventBooking.findByIdAndUpdate(
       bookingId,
       { paymentStatus: "paid" },
       { new: true }
@@ -322,12 +334,126 @@ router.post("/payment/success", async (req, res) => {
       });
     }
 
+    const event = booking.eventId;
+    const normalizedEmail = booking.userEmail.toLowerCase();
+
+    // Already Google synced na duplicate create panna vendam
+    if (!booking.googleEventId) {
+      const googleToken = await GoogleToken.findOne({
+        userEmail: normalizedEmail,
+      });
+
+      if (googleToken) {
+        try {
+          const oauth2Client = createOAuthClient();
+
+          oauth2Client.setCredentials({
+            access_token: googleToken.accessToken,
+            refresh_token: googleToken.refreshToken,
+            expiry_date: googleToken.expiryDate,
+            token_type: googleToken.tokenType,
+            scope: googleToken.scope,
+          });
+
+          const calendar = google.calendar({
+            version: "v3",
+            auth: oauth2Client,
+          });
+
+          const googleEventPayload = {
+            colorId: "9",
+            summary: event.title,
+            description: `
+My_Biz Event Booking
+
+Ticket ID: ${booking.ticketId}
+Invoice: ${booking.invoiceNumber}
+Payment Status: PAID
+
+${event.description || ""}
+            `.trim(),
+            location: `${event.venue || ""}, ${event.address || ""}, ${event.district || ""}`,
+            extendedProperties: {
+              private: {
+                category: "Booked Event",
+                priority: "Medium",
+                source: "My_Biz_F5",
+                ticketId: booking.ticketId,
+              },
+            },
+            start: {
+              dateTime: new Date(event.startDateTime).toISOString(),
+              timeZone: "Asia/Kolkata",
+            },
+            end: {
+              dateTime: new Date(event.endDateTime).toISOString(),
+              timeZone: "Asia/Kolkata",
+            },
+          };
+
+          const googleResponse = await calendar.events.insert({
+            calendarId: "primary",
+            requestBody: googleEventPayload,
+            sendUpdates: "none",
+          });
+
+          booking.googleEventId = googleResponse.data.id || "";
+          booking.calendarId = "primary";
+          booking.googleHtmlLink = googleResponse.data.htmlLink || "";
+          await booking.save();
+
+          await CalendarEvent.findOneAndUpdate(
+            {
+              userEmail: normalizedEmail,
+              googleEventId: googleResponse.data.id,
+            },
+            {
+              userEmail: normalizedEmail,
+              taskId: "",
+              googleEventId: googleResponse.data.id || "",
+              htmlLink: googleResponse.data.htmlLink || "",
+              calendarId: "primary",
+              title: event.title,
+              description: event.description || "",
+              location: `${event.venue || ""}, ${event.district || ""}`,
+              category: "Booked Event",
+              priority: "Medium",
+              colorId: "9",
+              startDateTime: event.startDateTime,
+              endDateTime: event.endDateTime,
+              attendees: [],
+              videoLink: "",
+              recurrenceRule: "",
+              syncStatus: "google_synced",
+            },
+            {
+              upsert: true,
+              new: true,
+            }
+          );
+        } catch (googleError) {
+          console.error("Booked event Google Calendar sync failed:", googleError.message);
+        }
+      } else {
+        console.log(
+          "Google Calendar not connected for event booking:",
+          normalizedEmail
+        );
+      }
+    }
+
+    booking = await EventBooking.findById(booking._id).populate("eventId");
+
     res.json({
       success: true,
-      message: "Payment marked as paid",
+      message: booking.googleEventId
+        ? "Payment completed and event synced to Google Calendar"
+        : "Payment marked as paid",
       booking,
     });
   } catch (error) {
+    console.error("Payment success error:", error);
+
     res.status(500).json({
       success: false,
       message: error.message,

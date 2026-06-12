@@ -65,6 +65,21 @@ const eventBookingSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    googleEventId: {
+    type: String,
+    default: "",
+    },
+
+    calendarId: { 
+      type: String, 
+      default: "primary" 
+    },
+
+    googleHtmlLink: {
+      type: String,
+      default: "",
+    },
   },
   { timestamps: true }
 );
