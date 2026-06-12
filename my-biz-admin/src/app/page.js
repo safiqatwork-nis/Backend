@@ -771,6 +771,9 @@ export default function Home() {
       : "not checked-in"
   }
 />
+<StatusBadge
+  label={booking.googleEventId ? "google synced" : "not synced"}
+/>
                             </div>
                           </div>
 
@@ -807,10 +810,11 @@ function StatCard({ title, value }) {
 function StatusBadge({ label }) {
   const text = String(label || "").toUpperCase();
 
-  const isGood =
-    text.includes("PAID") ||
-    text.includes("CHECKED") ||
-    text.includes("BOOKED");
+ const isGood =
+  text.includes("PAID") ||
+  text.includes("CHECKED") ||
+  text.includes("BOOKED") ||
+  text.includes("SYNCED");
 
   const isPending =
     text.includes("PENDING") ||

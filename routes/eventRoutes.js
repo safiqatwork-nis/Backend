@@ -844,4 +844,31 @@ router.post("/booking/cancel", async (req, res) => {
   }
 });
 
+
+router.get("/booking/ticket/:ticketId", async (req, res) => {
+  try {
+    const booking = await EventBooking.findOne({
+      ticketId: req.params.ticketId,
+    }).populate("eventId");
+
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: "Booking not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      booking,
+      event: booking.eventId,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
 module.exports = router;
