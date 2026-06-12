@@ -336,12 +336,15 @@ router.post("/payment/success", async (req, res) => {
 
     const event = booking.eventId;
     const normalizedEmail = booking.userEmail.toLowerCase();
+    console.log("F5 PAYMENT SUCCESS BOOKING EMAIL:", normalizedEmail);
+    console.log("F5 BOOKED EVENT:", event.title);
 
     // Already Google synced na duplicate create panna vendam
     if (!booking.googleEventId) {
       const googleToken = await GoogleToken.findOne({
         userEmail: normalizedEmail,
       });
+      console.log("F5 GOOGLE TOKEN FOUND:", !!googleToken);
 
       if (googleToken) {
         try {
@@ -432,14 +435,22 @@ ${event.description || ""}
             }
           );
         } catch (googleError) {
-          console.error("Booked event Google Calendar sync failed:", googleError.message);
-        }
+  console.error("Booked event Google Calendar sync failed:", googleError);
+
+  return res.status(500).json({
+    success: false,
+    message: "Payment completed but Google Calendar sync failed",
+    googleError: googleError.message,
+  });
+}
       } else {
-        console.log(
-          "Google Calendar not connected for event booking:",
-          normalizedEmail
-        );
-      }
+  console.log("Google Calendar token not found for:", normalizedEmail);
+
+  return res.status(401).json({
+    success: false,
+    message: `Google Calendar is not connected for ${normalizedEmail}`,
+  });
+}
     }
 
     booking = await EventBooking.findById(booking._id).populate("eventId");
