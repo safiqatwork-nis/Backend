@@ -889,6 +889,23 @@ router.post("/payment/phonepe/create", async (req, res) => {
       });
     }
 
+    if (process.env.PHONEPE_TEST_MODE === "true") {
+  const testOrderId = `TEST-PHONEPE-${Date.now()}`;
+
+  booking.phonePeOrderId = testOrderId;
+  await booking.save();
+
+  return res.json({
+    success: true,
+    testMode: true,
+    message: "PhonePe test order created",
+    phonepe: {
+      orderId: testOrderId,
+      paymentUrl: `${BASE_URL}/api/events/payment/phonepe/test-pay/${booking._id}`,
+    },
+  });
+}
+
     const merchantOrderId = uuidv4();
 
     const phonepeResponse =
@@ -917,6 +934,143 @@ router.post("/payment/phonepe/create", async (req, res) => {
     phonepeError: error.response?.data || null,
   });
 }
+});
+
+
+
+router.get("/payment/phonepe/test-pay/:bookingId", async (req, res) => {
+  try {
+    const booking = await EventBooking.findById(req.params.bookingId).populate(
+      "eventId"
+    );
+
+    if (!booking) {
+      return res.send("<h1>Booking not found</h1>");
+    }
+
+    res.send(`
+      <html>
+        <head>
+          <title>PhonePe Test Payment</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              background: #f5f3ff;
+              padding: 24px;
+            }
+            .card {
+              max-width: 420px;
+              margin: auto;
+              background: white;
+              padding: 24px;
+              border-radius: 20px;
+              box-shadow: 0 12px 35px rgba(0,0,0,0.12);
+            }
+            .logo {
+              background: #5f259f;
+              color: white;
+              padding: 12px 16px;
+              border-radius: 14px;
+              font-size: 22px;
+              font-weight: bold;
+              display: inline-block;
+            }
+            h1 { color: #111827; }
+            p { color: #4b5563; }
+            .amount {
+              font-size: 32px;
+              font-weight: bold;
+              color: #5f259f;
+              margin: 18px 0;
+            }
+            button {
+              width: 100%;
+              border: none;
+              background: #5f259f;
+              color: white;
+              padding: 16px;
+              font-size: 16px;
+              border-radius: 14px;
+              font-weight: bold;
+              margin-top: 16px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="logo">PhonePe Test</div>
+            <h1>${booking.eventId.title}</h1>
+            <p>Ticket ID: ${booking.ticketId}</p>
+            <p>Email: ${booking.userEmail}</p>
+            <div class="amount">₹${booking.ticketPrice}</div>
+
+            <form method="POST" action="/api/events/payment/phonepe/test-success/${booking._id}">
+              <button type="submit">Pay Successfully</button>
+            </form>
+          </div>
+        </body>
+      </html>
+    `);
+  } catch (error) {
+    res.send(`<h1>Error</h1><p>${error.message}</p>`);
+  }
+});
+
+router.post("/payment/phonepe/test-success/:bookingId", async (req, res) => {
+  try {
+    const booking = await EventBooking.findById(req.params.bookingId);
+
+    if (!booking) {
+      return res.send("<h1>Booking not found</h1>");
+    }
+
+    booking.paymentStatus = "paid";
+    await booking.save();
+
+    res.send(`
+      <html>
+        <head>
+          <title>Payment Success</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <style>
+            body { font-family: Arial; background:#ecfdf5; padding:24px; }
+            .card {
+              max-width:420px;
+              margin:auto;
+              background:white;
+              padding:24px;
+              border-radius:20px;
+              box-shadow:0 12px 35px rgba(0,0,0,0.12);
+              text-align:center;
+            }
+            h1 { color:#16a34a; }
+            a {
+              display:block;
+              margin-top:18px;
+              background:#16a34a;
+              color:white;
+              padding:14px;
+              border-radius:14px;
+              text-decoration:none;
+              font-weight:bold;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <h1>Payment Success</h1>
+            <p>Your PhonePe test payment is completed.</p>
+            <a href="/api/events/tickets/verify/${booking.ticketId}">
+              View Ticket Verification
+            </a>
+          </div>
+        </body>
+      </html>
+    `);
+  } catch (error) {
+    res.send(`<h1>Error</h1><p>${error.message}</p>`);
+  }
 });
 
 module.exports = router;
