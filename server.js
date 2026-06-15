@@ -8,6 +8,7 @@ const taskRoutes = require("./routes/taskRoutes");
 const calendarRoutes = require("./routes/calendarRoutes");
 const googleRoutes = require("./routes/googleRoutes");
 const eventRoutes = require("./routes/eventRoutes");
+const networkRoutes = require("./routes/networkRoutes");
 
 
 const app = express();
@@ -25,6 +26,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/calendar", calendarRoutes);
 app.use("/api/google", googleRoutes);
+app.use("/api/network", networkRoutes);
 
 mongoose.connect(process.env.MONGO_URI)
 .then(() => {
