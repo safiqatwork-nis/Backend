@@ -80,6 +80,26 @@ const eventBookingSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+
+    phonePeOrderId: {
+  type: String,
+  default: "",
+},
+
+googleEventId: {
+  type: String,
+  default: "",
+},
+
+googleHtmlLink: {
+  type: String,
+  default: "",
+},
+
+calendarId: {
+  type: String,
+  default: "",
+},
   },
   { timestamps: true }
 );

@@ -6,6 +6,9 @@ const EventBooking = require("../models/EventBooking");
 
 const router = express.Router();
 
+const { v4: uuidv4 } = require("uuid");
+const { createPaymentOrder } = require("../utils/phonepe");
+
 const { google } = require("googleapis");
 const GoogleToken = require("../models/GoogleToken");
 const CalendarEvent = require("../models/CalendarEvent");
@@ -864,6 +867,50 @@ router.get("/booking/ticket/:ticketId", async (req, res) => {
       event: booking.eventId,
     });
   } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+
+
+router.post("/payment/phonepe/create", async (req, res) => {
+  try {
+    const { bookingId } = req.body;
+
+    const booking = await EventBooking.findById(bookingId);
+
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: "Booking not found",
+      });
+    }
+
+    const merchantOrderId = uuidv4();
+
+    const phonepeResponse =
+      await createPaymentOrder({
+        merchantOrderId,
+        amount: booking.ticketPrice * 100,
+        redirectUrl:
+          process.env.PHONEPE_REDIRECT_URL,
+      });
+
+    booking.phonePeOrderId =
+      merchantOrderId;
+
+    await booking.save();
+
+    res.json({
+      success: true,
+      phonepe: phonepeResponse,
+    });
+  } catch (error) {
+    console.error(error);
+
     res.status(500).json({
       success: false,
       message: error.message,
