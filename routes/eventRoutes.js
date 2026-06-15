@@ -1061,15 +1061,48 @@ router.post("/payment/phonepe/test-success/:bookingId", async (req, res) => {
           <div class="card">
             <h1>Payment Success</h1>
             <p>Your PhonePe test payment is completed.</p>
-            <a href="/api/events/tickets/verify/${booking.ticketId}">
-              View Ticket Verification
-            </a>
+         <a href="mybiz://event-payment-success?bookingId=${booking._id}">
+  Return to My_Biz App
+</a>
+
+<script>
+  setTimeout(function() {
+    window.location.href = "mybiz://event-payment-success?bookingId=${booking._id}";
+  }, 1000);
+</script>
           </div>
         </body>
       </html>
     `);
   } catch (error) {
     res.send(`<h1>Error</h1><p>${error.message}</p>`);
+  }
+});
+
+
+router.get("/booking/:bookingId", async (req, res) => {
+  try {
+    const booking = await EventBooking.findById(req.params.bookingId).populate(
+      "eventId"
+    );
+
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: "Booking not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      booking,
+      event: booking.eventId,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 });
 
