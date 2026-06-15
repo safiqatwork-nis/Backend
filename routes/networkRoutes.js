@@ -245,19 +245,47 @@ router.post("/request/decline", async (req, res) => {
 /* GET CONNECTIONS */
 router.get("/connections/:email", async (req, res) => {
   try {
+    const email = req.params.email;
+
     const connections = await Connection.find({
-      userEmail: req.params.email,
-    }).sort({ createdAt: -1 });
+      userEmail: email,
+    }).sort({
+      relationshipStrength: -1,
+    });
+
+    const result = [];
+
+    for (const item of connections) {
+      const profile = await UserProfile.findOne({
+        email: item.connectionEmail,
+      });
+
+      result.push({
+        _id: item._id,
+
+        connectionEmail: item.connectionEmail,
+
+        category: item.category,
+
+        tier: item.tier,
+
+        notes: item.notes,
+
+        relationshipStrength:
+            item.relationshipStrength,
+
+        profile,
+      });
+    }
 
     res.status(200).json({
       success: true,
-      connections,
+      connections: result,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: "Connections fetch failed",
-      error: error.message,
+      message: error.message,
     });
   }
 });
@@ -447,6 +475,109 @@ router.get("/suggestions/:email", async (req, res) => {
     });
   }
 });
+
+
+
+
+router.get("/search/:keyword", async (req, res) => {
+  try {
+
+    const keyword = req.params.keyword;
+
+    const users =
+      await UserProfile.find({
+        $or: [
+          {
+            name: {
+              $regex: keyword,
+              $options: "i",
+            },
+          },
+          {
+            companyName: {
+              $regex: keyword,
+              $options: "i",
+            },
+          },
+          {
+            industry: {
+              $regex: keyword,
+              $options: "i",
+            },
+          },
+        ],
+      }).limit(30);
+
+    res.status(200).json({
+      success: true,
+      users,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+
+
+
+router.get(
+  "/mutual/:userEmail/:targetEmail",
+  async (req, res) => {
+    try {
+
+      const userEmail =
+        req.params.userEmail;
+
+      const targetEmail =
+        req.params.targetEmail;
+
+      const myConnections =
+        await Connection.find({
+          userEmail,
+        });
+
+      const targetConnections =
+        await Connection.find({
+          userEmail: targetEmail,
+        });
+
+      const mySet =
+        myConnections.map(
+          (e) => e.connectionEmail
+        );
+
+      const targetSet =
+        targetConnections.map(
+          (e) => e.connectionEmail
+        );
+
+      const mutual =
+        mySet.filter(
+          (e) => targetSet.includes(e)
+        );
+
+      res.status(200).json({
+        success: true,
+        count: mutual.length,
+        mutual,
+      });
+
+    } catch (error) {
+
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+
+    }
+  }
+);
+
+
+
 
 /* EXPORT CSV */
 router.get("/export/csv/:email", async (req, res) => {
