@@ -909,13 +909,14 @@ router.post("/payment/phonepe/create", async (req, res) => {
       phonepe: phonepeResponse,
     });
   } catch (error) {
-    console.error(error);
+  console.error("PHONEPE CREATE ERROR:", error.response?.data || error.message);
 
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
+  res.status(500).json({
+    success: false,
+    message: error.message,
+    phonepeError: error.response?.data || null,
+  });
+}
 });
 
 module.exports = router;
