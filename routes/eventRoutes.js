@@ -1061,13 +1061,13 @@ router.post("/payment/phonepe/test-success/:bookingId", async (req, res) => {
           <div class="card">
             <h1>Payment Success</h1>
             <p>Your PhonePe test payment is completed.</p>
-         <a href="mybiz://event-payment-success?bookingId=${booking._id}">
+         <a href="intent://event-payment-success?bookingId=${booking._id}#Intent;scheme=mybiz;package=com.brandmindz.my_biz;end">
   Return to My_Biz App
 </a>
 
 <script>
   setTimeout(function() {
-    window.location.href = "mybiz://event-payment-success?bookingId=${booking._id}";
+    window.location.href = "intent://event-payment-success?bookingId=${booking._id}#Intent;scheme=mybiz;package=com.brandmindz.my_biz;end";
   }, 1000);
 </script>
           </div>
