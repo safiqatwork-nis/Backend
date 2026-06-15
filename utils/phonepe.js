@@ -2,8 +2,29 @@ const axios = require("axios");
 
 function getBaseUrl() {
   return process.env.PHONEPE_ENV === "PRODUCTION"
-    ? "https://api.phonepe.com/apis/pg"
+    ? "https://api.phonepe.com/apis"
     : "https://api-preprod.phonepe.com/apis/pg-sandbox";
+}
+
+async function getAccessToken() {
+  const url =
+    process.env.PHONEPE_ENV === "PRODUCTION"
+      ? "https://api.phonepe.com/apis/identity-manager/v1/oauth/token"
+      : "https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token";
+
+  const params = new URLSearchParams();
+  params.append("client_id", process.env.PHONEPE_CLIENT_ID);
+  params.append("client_version", process.env.PHONEPE_CLIENT_VERSION || "1");
+  params.append("client_secret", process.env.PHONEPE_CLIENT_SECRET);
+  params.append("grant_type", "client_credentials");
+
+  const response = await axios.post(url, params.toString(), {
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+  });
+
+  return response.data.access_token;
 }
 
 async function createPaymentOrder({
@@ -11,6 +32,8 @@ async function createPaymentOrder({
   amount,
   redirectUrl,
 }) {
+  const accessToken = await getAccessToken();
+
   const response = await axios.post(
     `${getBaseUrl()}/checkout/v2/pay`,
     {
@@ -28,9 +51,7 @@ async function createPaymentOrder({
     {
       headers: {
         "Content-Type": "application/json",
-        client_id: process.env.PHONEPE_CLIENT_ID,
-        client_secret: process.env.PHONEPE_CLIENT_SECRET,
-        client_version: process.env.PHONEPE_CLIENT_VERSION,
+        Authorization: `O-Bearer ${accessToken}`,
       },
     }
   );
