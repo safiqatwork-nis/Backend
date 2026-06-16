@@ -293,10 +293,10 @@ router.get("/connections/:email", async (req, res) => {
 /* UPDATE CATEGORY */
 router.post("/category/update", async (req, res) => {
   try {
-    const { userEmail, connectionEmail, category } = req.body;
+    const { userEmail, connectionPhone, category } = req.body;
 
     const connection = await Connection.findOneAndUpdate(
-      { userEmail, connectionEmail },
+      { userEmail, connectionPhone },
       { category },
       { new: true }
     );
@@ -318,13 +318,25 @@ router.post("/category/update", async (req, res) => {
 /* UPDATE PRIVATE NOTES */
 router.post("/notes/update", async (req, res) => {
   try {
-    const { userEmail, connectionEmail, notes } = req.body;
+    const {
+      userEmail,
+      connectionPhone,
+      notes,
+    } = req.body;
 
-    const connection = await Connection.findOneAndUpdate(
-      { userEmail, connectionEmail },
-      { notes },
-      { new: true }
-    );
+    const connection =
+      await Connection.findOneAndUpdate(
+        {
+          userEmail,
+          connectionPhone,
+        },
+        {
+          notes,
+        },
+        {
+          new: true,
+        }
+      );
 
     res.status(200).json({
       success: true,
@@ -341,73 +353,111 @@ router.post("/notes/update", async (req, res) => {
 });
 
 /* ADD INTERACTION */
-router.post("/interaction/add", async (req, res) => {
-  try {
-    const {
-      userEmail,
-      connectionEmail,
-      type,
-      title,
-      description,
-      interactionDate,
-    } = req.body;
+router.post(
+  "/interaction/add",
+  async (req, res) => {
+    try {
 
-    const interaction = await Interaction.create({
-      userEmail,
-      connectionEmail,
-      type,
-      title,
-      description,
-      interactionDate,
-    });
+      const {
+        userEmail,
+        connectionPhone,
+        type,
+        title,
+        description,
+        interactionDate,
+      } = req.body;
 
-    const count = await Interaction.countDocuments({
-      userEmail,
-      connectionEmail,
-    });
+      const interaction =
+        await Interaction.create({
+          userEmail,
+          connectionPhone,
+          type,
+          title,
+          description,
+          interactionDate,
+        });
 
-    const strength = Math.min(100, 20 + count * 10);
+      const count =
+        await Interaction.countDocuments({
+          userEmail,
+          connectionPhone,
+        });
 
-    await Connection.findOneAndUpdate(
-      { userEmail, connectionEmail },
-      { relationshipStrength: strength }
-    );
+      const strength =
+        Math.min(
+          100,
+          20 + count * 10
+        );
 
-    res.status(201).json({
-      success: true,
-      message: "Interaction added",
-      interaction,
-      relationshipStrength: strength,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Interaction add failed",
-      error: error.message,
-    });
+      await Connection.findOneAndUpdate(
+        {
+          userEmail,
+          connectionPhone,
+        },
+        {
+          relationshipStrength:
+              strength,
+        }
+      );
+
+      res.status(201).json({
+        success: true,
+        message:
+            "Interaction added",
+        interaction,
+        relationshipStrength:
+            strength,
+      });
+
+    } catch (error) {
+
+      res.status(500).json({
+        success: false,
+        message:
+            "Interaction add failed",
+        error:
+            error.message,
+      });
+
+    }
   }
-});
+);
 
 /* GET INTERACTIONS */
-router.get("/interaction/:userEmail/:connectionEmail", async (req, res) => {
-  try {
-    const interactions = await Interaction.find({
-      userEmail: req.params.userEmail,
-      connectionEmail: req.params.connectionEmail,
-    }).sort({ interactionDate: -1 });
+router.get(
+  "/interaction/:userEmail/:connectionPhone",
+  async (req, res) => {
+    try {
 
-    res.status(200).json({
-      success: true,
-      interactions,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Interaction fetch failed",
-      error: error.message,
-    });
+      const interactions =
+          await Interaction.find({
+        userEmail:
+            req.params.userEmail,
+
+        connectionPhone:
+            req.params.connectionPhone,
+      }).sort({
+        interactionDate: -1,
+      });
+
+      res.status(200).json({
+        success: true,
+        interactions,
+      });
+
+    } catch (error) {
+
+      res.status(500).json({
+        success: false,
+        message:
+            "Interaction fetch failed",
+        error:
+            error.message,
+      });
+
+    }
   }
-});
+);
 
 /* INTRODUCTION REQUEST */
 router.post("/introduction/request", async (req, res) => {
@@ -479,43 +529,39 @@ router.get("/suggestions/:email", async (req, res) => {
 
 
 
-router.get("/search/:keyword", async (req, res) => {
+router.get("/discover/search", async (req, res) => {
   try {
+    const keyword = req.query.keyword || "";
+    const location = req.query.location || "";
+    const userEmail = req.query.userEmail || "";
 
-    const keyword = req.params.keyword;
+    const query = {
+      userEmail: { $ne: userEmail },
+    };
 
-    const users =
-      await UserProfile.find({
-        $or: [
-          {
-            name: {
-              $regex: keyword,
-              $options: "i",
-            },
-          },
-          {
-            companyName: {
-              $regex: keyword,
-              $options: "i",
-            },
-          },
-          {
-            industry: {
-              $regex: keyword,
-              $options: "i",
-            },
-          },
-        ],
-      }).limit(30);
+    if (keyword) {
+      query.$or = [
+        { connectionName: { $regex: keyword, $options: "i" } },
+        { businessName: { $regex: keyword, $options: "i" } },
+        { businessCategory: { $regex: keyword, $options: "i" } },
+      ];
+    }
+
+    if (location) {
+      query.location = { $regex: location, $options: "i" };
+    }
+
+    const contacts = await Connection.find(query).limit(50);
 
     res.status(200).json({
       success: true,
-      users,
+      results: contacts,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message,
+      message: "Search failed",
+      error: error.message,
     });
   }
 });
@@ -575,6 +621,68 @@ router.get(
     }
   }
 );
+
+
+router.post("/contact/add", async (req, res) => {
+  try {
+    const {
+      userEmail,
+      connectionName,
+      connectionPhone,
+      connectionEmail,
+      businessName,
+      businessCategory,
+      location,
+      category,
+      notes,
+    } = req.body;
+
+    if (!userEmail || !connectionName || !connectionPhone) {
+      return res.status(400).json({
+        success: false,
+        message: "userEmail, connectionName and connectionPhone are required",
+      });
+    }
+
+    const existing = await Connection.findOne({
+      userEmail,
+      connectionPhone,
+    });
+
+    if (existing) {
+      return res.status(409).json({
+        success: false,
+        message: "Contact already exists",
+      });
+    }
+
+    const contact = await Connection.create({
+      userEmail,
+      connectionName,
+      connectionPhone,
+      connectionEmail: connectionEmail || "",
+      businessName: businessName || "",
+      businessCategory: businessCategory || "",
+      location: location || "",
+      category: category || "Peer",
+      notes: notes || "",
+      tier: "1st",
+      relationshipStrength: 20,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Contact added successfully",
+      contact,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Contact add failed",
+      error: error.message,
+    });
+  }
+});
 
 
 

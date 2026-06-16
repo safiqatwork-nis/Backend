@@ -3,7 +3,14 @@ const mongoose = require("mongoose");
 const connectionSchema = new mongoose.Schema(
   {
     userEmail: { type: String, required: true },
-    connectionEmail: { type: String, required: true },
+
+    connectionName: { type: String, required: true },
+    connectionPhone: { type: String, required: true },
+    connectionEmail: { type: String, default: "" },
+
+    businessName: { type: String, default: "" },
+    businessCategory: { type: String, default: "" },
+    location: { type: String, default: "" },
 
     category: {
       type: String,
@@ -18,11 +25,7 @@ const connectionSchema = new mongoose.Schema(
     },
 
     notes: { type: String, default: "" },
-
-    relationshipStrength: {
-      type: Number,
-      default: 20,
-    },
+    relationshipStrength: { type: Number, default: 20 },
   },
   { timestamps: true }
 );
