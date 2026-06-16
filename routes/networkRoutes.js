@@ -315,6 +315,95 @@ router.post("/category/update", async (req, res) => {
   }
 });
 
+
+
+
+router.post("/contact/update", async (req, res) => {
+  try {
+    const {
+      userEmail,
+      oldConnectionPhone,
+      connectionName,
+      connectionPhone,
+      connectionEmail,
+      businessName,
+      businessCategory,
+      location,
+      category,
+      notes,
+    } = req.body;
+
+    const contact = await Connection.findOneAndUpdate(
+      {
+        userEmail,
+        connectionPhone: oldConnectionPhone,
+      },
+      {
+        connectionName,
+        connectionPhone,
+        connectionEmail,
+        businessName,
+        businessCategory,
+        location,
+        category,
+        notes,
+      },
+      { new: true }
+    );
+
+    if (!contact) {
+      return res.status(404).json({
+        success: false,
+        message: "Contact not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Contact updated successfully",
+      contact,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Contact update failed",
+      error: error.message,
+    });
+  }
+});
+
+
+
+router.delete("/contact/delete", async (req, res) => {
+  try {
+    const { userEmail, connectionPhone } = req.body;
+
+    await Connection.deleteOne({
+      userEmail,
+      connectionPhone,
+    });
+
+    await Interaction.deleteMany({
+      userEmail,
+      connectionPhone,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Contact deleted successfully",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Contact delete failed",
+      error: error.message,
+    });
+  }
+});
+
+
+
+
 /* UPDATE PRIVATE NOTES */
 router.post("/notes/update", async (req, res) => {
   try {
@@ -534,9 +623,16 @@ router.get("/discover/search", async (req, res) => {
     const keyword = req.query.keyword || "";
     const location = req.query.location || "";
     const userEmail = req.query.userEmail || "";
+    const page = parseInt(req.query.page || "1");
+    const limit = parseInt(req.query.limit || "20");
+    const skip = (page - 1) * limit;
+
+    const myContacts = await Connection.find({ userEmail });
+    const savedPhones = myContacts.map((c) => c.connectionPhone);
 
     const query = {
       userEmail: { $ne: userEmail },
+      connectionPhone: { $nin: savedPhones },
     };
 
     if (keyword) {
@@ -551,11 +647,19 @@ router.get("/discover/search", async (req, res) => {
       query.location = { $regex: location, $options: "i" };
     }
 
-    const contacts = await Connection.find(query).limit(50);
+    const results = await Connection.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await Connection.countDocuments(query);
 
     res.status(200).json({
       success: true,
-      results: contacts,
+      page,
+      total,
+      hasMore: skip + results.length < total,
+      results,
     });
   } catch (error) {
     res.status(500).json({
@@ -621,6 +725,81 @@ router.get(
     }
   }
 );
+
+
+
+
+router.get("/degree/:userEmail/:targetPhone", async (req, res) => {
+  try {
+    const { userEmail, targetPhone } = req.params;
+
+    const direct = await Connection.findOne({
+      userEmail,
+      connectionPhone: targetPhone,
+    });
+
+    if (direct) {
+      return res.status(200).json({
+        success: true,
+        degree: "1st",
+        mutualCount: 0,
+        mutualContacts: [],
+      });
+    }
+
+    const myContacts = await Connection.find({ userEmail });
+    const myPhones = myContacts.map((c) => c.connectionPhone);
+
+    const targetContactRecords = await Connection.find({
+      connectionPhone: targetPhone,
+    });
+
+    const targetOwners = targetContactRecords.map((c) => c.userEmail);
+
+    const mutualContacts = await Connection.find({
+      userEmail,
+      connectionEmail: { $in: targetOwners },
+    });
+
+    if (mutualContacts.length > 0) {
+      return res.status(200).json({
+        success: true,
+        degree: "2nd",
+        mutualCount: mutualContacts.length,
+        mutualContacts,
+      });
+    }
+
+    const secondLevel = await Connection.find({
+      userEmail: { $in: myPhones },
+      connectionPhone: targetPhone,
+    });
+
+    if (secondLevel.length > 0) {
+      return res.status(200).json({
+        success: true,
+        degree: "3rd",
+        mutualCount: 0,
+        mutualContacts: [],
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      degree: "Out of Network",
+      mutualCount: 0,
+      mutualContacts: [],
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Degree check failed",
+      error: error.message,
+    });
+  }
+});
+
+
 
 
 router.post("/contact/add", async (req, res) => {
