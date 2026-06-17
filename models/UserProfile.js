@@ -8,9 +8,11 @@ const userProfileSchema = new mongoose.Schema(
 
     headline: { type: String, default: "" },
     companyName: { type: String, default: "" },
+    businessLogo: { type: String, default: "" },
     role: { type: String, default: "" },
     industry: { type: String, default: "" },
     location: { type: String, default: "" },
+    googleMapLocation: { type: String, default: "" },
 
     bio: { type: String, default: "" },
     skills: [{ type: String }],

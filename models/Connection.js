@@ -10,7 +10,9 @@ const connectionSchema = new mongoose.Schema(
 
     businessName: { type: String, default: "" },
     businessCategory: { type: String, default: "" },
+    businessLogo: { type: String, default: "" },
     location: { type: String, default: "" },
+    googleMapLocation: { type: String, default: "" },
 
     category: {
       type: String,
