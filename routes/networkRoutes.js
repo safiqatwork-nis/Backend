@@ -9,6 +9,8 @@ const IntroductionRequest = require("../models/IntroductionRequest");
 const router = express.Router();
 
 const normalizePhone = (value = "") => String(value).replace(/\D/g, "");
+const escapeRegex = (value = "") =>
+  String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const escapeCsv = (value = "") => `"${String(value).replace(/"/g, '""')}"`;
 
 const contactPayload = (contact, profile = null) => ({
@@ -76,24 +78,32 @@ router.post("/profile/create", async (req, res) => {
       });
     }
 
+    const profileUpdate = {
+      email,
+      name,
+      headline,
+      companyName,
+      role,
+      industry,
+      location,
+      googleMapLocation,
+      bio,
+      skills,
+      interests,
+      profileImage,
+    };
+
+    if (typeof phone === "string" && phone.trim()) {
+      profileUpdate.phone = phone;
+    }
+
+    if (typeof businessLogo === "string" && businessLogo.length > 0) {
+      profileUpdate.businessLogo = businessLogo;
+    }
+
     const profile = await UserProfile.findOneAndUpdate(
       { email },
-      {
-        email,
-        name,
-        phone,
-        headline,
-        companyName,
-        businessLogo: businessLogo || profileImage || "",
-        role,
-        industry,
-        location,
-        googleMapLocation,
-        bio,
-        skills,
-        interests,
-        profileImage,
-      },
+      { $set: profileUpdate },
       { new: true, upsert: true }
     );
 
@@ -777,8 +787,6 @@ router.get("/suggestions/:email", async (req, res) => {
 });
 
 
-
-
 router.get("/discover/search", async (req, res) => {
   try {
     const keyword = String(req.query.keyword || "").trim();
@@ -789,81 +797,78 @@ router.get("/discover/search", async (req, res) => {
     const skip = (page - 1) * limit;
 
     const myContacts = await Connection.find({ userEmail });
-    const savedNormalizedPhones = myContacts
-      .map((c) => normalizePhone(c.connectionPhone))
-      .filter(Boolean);
-    const seenPhones = new Set(savedNormalizedPhones);
 
-    const keywordRegex = keyword ? new RegExp(keyword, "i") : null;
-    const locationRegex = location ? new RegExp(location, "i") : null;
+    const savedPhones = new Set(
+      myContacts
+        .map((c) => normalizePhone(c.connectionPhone))
+        .filter(Boolean)
+    );
+
+    const escapedKeyword = escapeRegex(keyword);
+    const escapedLocation = escapeRegex(location);
+    const keywordRegex = keyword ? new RegExp(escapedKeyword, "i") : null;
+    const locationRegex = location ? new RegExp(escapedLocation, "i") : null;
     const normalizedKeyword = normalizePhone(keyword);
-    const phoneSearch = normalizedKeyword.length >= 4;
-    const candidates = [];
-
-    const connectionQuery = {
-      userEmail: { $ne: userEmail },
-    };
-
-    if (keywordRegex && !phoneSearch) {
-      connectionQuery.$or = [
-        { connectionName: { $regex: keyword, $options: "i" } },
-        { connectionPhone: { $regex: keyword, $options: "i" } },
-        { connectionEmail: { $regex: keyword, $options: "i" } },
-        { businessName: { $regex: keyword, $options: "i" } },
-        { businessCategory: { $regex: keyword, $options: "i" } },
-        { location: { $regex: keyword, $options: "i" } },
-      ];
-    }
-
-    if (locationRegex) {
-      connectionQuery.location = { $regex: location, $options: "i" };
-    }
+    const isPhoneKeyword =
+      normalizedKeyword.length > 0 && /^[\d\s()+.-]+$/.test(keyword);
 
     const profileQuery = {
-      email: { $ne: userEmail },
+      email: {
+        $not: new RegExp(`^${escapeRegex(userEmail)}$`, "i"),
+      },
+      phone: { $nin: [null, ""] },
     };
 
-    if (keywordRegex && !phoneSearch) {
+    if (keywordRegex) {
       profileQuery.$or = [
-        { name: { $regex: keyword, $options: "i" } },
-        { phone: { $regex: keyword, $options: "i" } },
-        { email: { $regex: keyword, $options: "i" } },
-        { companyName: { $regex: keyword, $options: "i" } },
-        { industry: { $regex: keyword, $options: "i" } },
-        { location: { $regex: keyword, $options: "i" } },
+        { phone: { $regex: escapedKeyword, $options: "i" } },
+        { name: { $regex: escapedKeyword, $options: "i" } },
+        { companyName: { $regex: escapedKeyword, $options: "i" } },
+        { industry: { $regex: escapedKeyword, $options: "i" } },
+        { location: { $regex: escapedKeyword, $options: "i" } },
       ];
+
+      if (isPhoneKeyword) {
+        profileQuery.$or.push({
+          phone: {
+            $regex: normalizedKeyword.split("").join("\\D*"),
+            $options: "i",
+          },
+        });
+      }
     }
 
     if (locationRegex) {
-      profileQuery.location = { $regex: location, $options: "i" };
+      profileQuery.location = { $regex: escapedLocation, $options: "i" };
     }
 
-    const [profileResults, connectionResults] = await Promise.all([
-      UserProfile.find(profileQuery).sort({ updatedAt: -1 }).limit(500),
-      Connection.find(connectionQuery).sort({ createdAt: -1 }).limit(500),
-    ]);
-
-    profileResults.forEach((profile) => candidates.push(profilePayload(profile)));
-    connectionResults.forEach((contact) => candidates.push(contactPayload(contact)));
+    const profileResults = await UserProfile.find(profileQuery)
+      .sort({ updatedAt: -1 });
 
     const results = [];
+    const seenPhones = new Set();
 
-    for (const item of candidates) {
+    for (const profile of profileResults) {
+      const item = profilePayload(profile);
+
       const normalized = normalizePhone(item.connectionPhone);
+
       const textMatches =
         !keywordRegex ||
-        keywordRegex.test(item.connectionName || "") ||
         keywordRegex.test(item.connectionPhone || "") ||
-        keywordRegex.test(item.connectionEmail || "") ||
+        keywordRegex.test(item.connectionName || "") ||
         keywordRegex.test(item.businessName || "") ||
         keywordRegex.test(item.businessCategory || "") ||
         keywordRegex.test(item.location || "") ||
-        (normalizedKeyword && normalized.includes(normalizedKeyword));
+        (isPhoneKeyword && normalized.includes(normalizedKeyword));
+
       const locationMatches =
         !locationRegex || locationRegex.test(item.location || "");
 
       if (!textMatches || !locationMatches) continue;
-      if (!normalized || seenPhones.has(normalized)) continue;
+      if (!normalized) continue;
+      if (savedPhones.has(normalized)) continue;
+      if (seenPhones.has(normalized)) continue;
 
       seenPhones.add(normalized);
       results.push(item);
@@ -881,7 +886,7 @@ router.get("/discover/search", async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: "Search failed",
+      message: "Discover search failed",
       error: error.message,
     });
   }
