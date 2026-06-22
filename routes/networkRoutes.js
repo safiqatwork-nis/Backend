@@ -19,6 +19,8 @@ const contactPayload = (contact, profile = null) => ({
   connectionName: contact.connectionName || profile?.name || "",
   connectionPhone: contact.connectionPhone || profile?.phone || "",
   connectionEmail: contact.connectionEmail || profile?.email || "",
+  interactionKey:
+    contact.interactionKey || contact.connectionPhone || profile?.phone || "",
   businessName: contact.businessName || profile?.companyName || "",
   businessCategory: contact.businessCategory || profile?.industry || "",
   businessLogo:
@@ -30,6 +32,14 @@ const contactPayload = (contact, profile = null) => ({
   tier: contact.tier || "1st",
   notes: contact.notes || "",
   relationshipStrength: contact.relationshipStrength ?? 20,
+  source: contact.source || "network",
+  contactType: contact.contactType || "app_user",
+  jobTitle: contact.jobTitle || "",
+  website: contact.website || "",
+  rawText: contact.rawText || "",
+  cardImageUrl: contact.cardImageUrl || "",
+  localImagePath: contact.localImagePath || "",
+  scannedCardId: contact.scannedCardId || null,
   profile,
 });
 
@@ -39,6 +49,7 @@ const profilePayload = (profile) => ({
   connectionName: profile.name || "",
   connectionPhone: profile.phone || "",
   connectionEmail: profile.email || "",
+  interactionKey: profile.phone || "",
   businessName: profile.companyName || "",
   businessCategory: profile.industry || "",
   businessLogo: profile.businessLogo || profile.profileImage || "",
@@ -48,6 +59,8 @@ const profilePayload = (profile) => ({
   tier: "2nd",
   notes: "",
   relationshipStrength: 20,
+  source: "network",
+  contactType: "app_user",
   profile,
 });
 
@@ -377,6 +390,7 @@ router.post("/category/update", async (req, res) => {
         userEmail,
         $or: [
           { connectionPhone },
+          { interactionKey: connectionPhone },
           ...(connectionEmail ? [{ connectionEmail }] : []),
         ],
       },
@@ -438,7 +452,8 @@ router.post("/contact/update", async (req, res) => {
     const duplicate = userContacts.find((item) => {
       const sameOldContact =
         oldConnectionPhone &&
-        normalizePhone(item.connectionPhone) === normalizePhone(oldConnectionPhone);
+        (normalizePhone(item.connectionPhone) === normalizePhone(oldConnectionPhone) ||
+          item.interactionKey === oldConnectionPhone);
       return (
         !sameOldContact &&
         normalizePhone(item.connectionPhone) === normalizedNewPhone
@@ -457,6 +472,7 @@ router.post("/contact/update", async (req, res) => {
         userEmail,
         $or: [
           { connectionPhone: oldConnectionPhone || connectionPhone },
+          { interactionKey: oldConnectionPhone || connectionPhone },
           ...(oldConnectionEmail ? [{ connectionEmail: oldConnectionEmail }] : []),
         ],
       },
@@ -464,6 +480,7 @@ router.post("/contact/update", async (req, res) => {
         connectionName,
         connectionPhone,
         connectionEmail,
+        interactionKey: connectionPhone,
         businessName,
         businessCategory,
         businessLogo: businessLogo || "",
@@ -513,6 +530,7 @@ router.delete("/contact/delete", async (req, res) => {
       userEmail,
       $or: [
         { connectionPhone },
+        { interactionKey: connectionPhone },
         ...(connectionEmail ? [{ connectionEmail }] : []),
       ],
     });
@@ -526,7 +544,7 @@ router.delete("/contact/delete", async (req, res) => {
 
     await Interaction.deleteMany({
       userEmail,
-      connectionPhone: contact.connectionPhone,
+      connectionPhone: contact.interactionKey || contact.connectionPhone,
     });
 
     res.status(200).json({
@@ -561,6 +579,7 @@ router.post("/notes/update", async (req, res) => {
           userEmail,
           $or: [
             { connectionPhone },
+            { interactionKey: connectionPhone },
             ...(connectionEmail ? [{ connectionEmail }] : []),
           ],
         },
@@ -617,7 +636,7 @@ router.post(
 
       const connection = await Connection.findOne({
         userEmail,
-        connectionPhone,
+        $or: [{ connectionPhone }, { interactionKey: connectionPhone }],
       });
 
       if (!connection) {
@@ -630,7 +649,7 @@ router.post(
       const interaction =
         await Interaction.create({
           userEmail,
-          connectionPhone,
+          connectionPhone: connection.interactionKey || connection.connectionPhone,
           type,
           title,
           description,
@@ -640,19 +659,16 @@ router.post(
       const count =
         await Interaction.countDocuments({
           userEmail,
-          connectionPhone,
+          connectionPhone: connection.interactionKey || connection.connectionPhone,
         });
 
-      const strength =
-        Math.min(
-          100,
-          20 + count * 10
-        );
+      const strength = connection.contactType === "external_card_contact"
+        ? Math.min(100, Math.max(0, count - 1) * 10)
+        : Math.min(100, 20 + count * 10);
 
       await Connection.findOneAndUpdate(
         {
-          userEmail,
-          connectionPhone,
+          _id: connection._id,
         },
         {
           relationshipStrength:

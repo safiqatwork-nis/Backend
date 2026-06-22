@@ -5,8 +5,9 @@ const connectionSchema = new mongoose.Schema(
     userEmail: { type: String, required: true },
 
     connectionName: { type: String, required: true },
-    connectionPhone: { type: String, required: true },
+    connectionPhone: { type: String, default: "" },
     connectionEmail: { type: String, default: "" },
+    interactionKey: { type: String, default: "" },
 
     businessName: { type: String, default: "" },
     businessCategory: { type: String, default: "" },
@@ -28,6 +29,19 @@ const connectionSchema = new mongoose.Schema(
 
     notes: { type: String, default: "" },
     relationshipStrength: { type: Number, default: 20 },
+
+    source: { type: String, default: "network" },
+    contactType: { type: String, default: "app_user" },
+    jobTitle: { type: String, default: "" },
+    website: { type: String, default: "" },
+    rawText: { type: String, default: "" },
+    cardImageUrl: { type: String, default: "" },
+    localImagePath: { type: String, default: "" },
+    scannedCardId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ScannedCard",
+      default: null,
+    },
   },
   { timestamps: true }
 );
