@@ -74,11 +74,12 @@ router.post("/check-duplicate", async (req, res) => {
       email,
     });
 
-    return res.json({
-      success: true,
-      duplicate: !!existing,
-      contact: existing,
-    });
+   return res.json({
+  success: true,
+  duplicate: !!existing,
+  source: existing ? "network_connection" : null,
+  contact: existing,
+});
   } catch (error) {
     console.error("Check duplicate error:", error);
     return res.status(500).json({
@@ -102,6 +103,10 @@ router.post("/create", async (req, res) => {
       address,
       rawText,
       cardImageUrl,
+      linkedin,
+instagram,
+facebook,
+whatsapp,
       localImagePath,
     } = req.body;
 
@@ -131,6 +136,10 @@ router.post("/create", async (req, res) => {
       rawText: cleanText(rawText),
       cardImageUrl: cleanText(cardImageUrl),
       localImagePath: cleanText(localImagePath),
+      linkedin: cleanText(linkedin),
+instagram: cleanText(instagram),
+facebook: cleanText(facebook),
+whatsapp: cleanText(whatsapp),
     });
 
     return res.status(201).json({
@@ -185,6 +194,10 @@ router.put("/update/:id", async (req, res) => {
         rawText: cleanText(req.body.rawText),
         cardImageUrl: cleanText(req.body.cardImageUrl),
         localImagePath: cleanText(req.body.localImagePath),
+        linkedin: cleanText(req.body.linkedin),
+instagram: cleanText(req.body.instagram),
+facebook: cleanText(req.body.facebook),
+whatsapp: cleanText(req.body.whatsapp),
       },
       { new: true }
     );
@@ -227,6 +240,10 @@ router.post("/save-to-network", async (req, res) => {
       website,
       address,
       rawText,
+      linkedin,
+instagram,
+facebook,
+whatsapp,
       cardImageUrl,
       localImagePath,
     } = req.body;
@@ -276,6 +293,10 @@ router.post("/save-to-network", async (req, res) => {
       rawText: cleanText(rawText),
       cardImageUrl: cleanText(cardImageUrl),
       localImagePath: cleanText(localImagePath),
+      linkedin: cleanText(linkedin),
+instagram: cleanText(instagram),
+facebook: cleanText(facebook),
+whatsapp: cleanText(whatsapp),
       source: "business_card_ocr",
       savedToNetwork: true,
     });
@@ -303,6 +324,10 @@ router.post("/save-to-network", async (req, res) => {
       rawText: cleanText(rawText),
       cardImageUrl: cleanText(cardImageUrl),
       localImagePath: cleanText(localImagePath),
+      linkedin: cleanText(linkedin),
+instagram: cleanText(instagram),
+facebook: cleanText(facebook),
+whatsapp: cleanText(whatsapp),
       scannedCardId: savedCard._id,
     });
 
@@ -341,6 +366,140 @@ router.post("/save-to-network", async (req, res) => {
     });
   }
 });
+
+
+
+
+router.post("/update-existing-network-contact", async (req, res) => {
+  try {
+    const {
+      userEmail,
+      name,
+      jobTitle,
+      company,
+      phone,
+      email,
+      website,
+      address,
+      linkedin,
+      instagram,
+      facebook,
+      whatsapp,
+      rawText,
+      cardImageUrl,
+      localImagePath,
+    } = req.body;
+
+    if (!userEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "userEmail is required",
+      });
+    }
+
+    if (!phone && !email) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone or email is required to find duplicate contact",
+      });
+    }
+
+    const ownerEmail = cleanText(userEmail);
+    const normalizedEmail = cleanText(email).toLowerCase();
+    const cleanedPhone = cleanText(phone);
+
+    const existing = await findNetworkDuplicate({
+      userEmail: ownerEmail,
+      phone: cleanedPhone,
+      email: normalizedEmail,
+    });
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: "Existing network contact not found",
+      });
+    }
+
+    const savedCard = await ScannedCard.create({
+      userEmail: ownerEmail.toLowerCase(),
+      name: cleanText(name),
+      jobTitle: cleanText(jobTitle),
+      company: cleanText(company),
+      phone: cleanedPhone,
+      email: normalizedEmail,
+      website: cleanText(website),
+      address: cleanText(address),
+      linkedin: cleanText(linkedin),
+      instagram: cleanText(instagram),
+      facebook: cleanText(facebook),
+      whatsapp: cleanText(whatsapp),
+      rawText: cleanText(rawText),
+      cardImageUrl: cleanText(cardImageUrl),
+      localImagePath: cleanText(localImagePath),
+      source: "business_card_ocr",
+      savedToNetwork: true,
+    });
+
+    const updateData = {
+      connectionName: cleanText(name) || existing.connectionName,
+      connectionPhone: cleanedPhone || existing.connectionPhone,
+      connectionEmail: normalizedEmail || existing.connectionEmail,
+      interactionKey:
+        cleanedPhone ||
+        existing.interactionKey ||
+        existing.connectionPhone ||
+        normalizedEmail,
+      businessName: cleanText(company) || existing.businessName,
+      businessCategory: cleanText(jobTitle) || existing.businessCategory,
+      location: cleanText(address) || existing.location,
+      jobTitle: cleanText(jobTitle) || existing.jobTitle,
+      website: cleanText(website) || existing.website,
+      linkedin: cleanText(linkedin) || existing.linkedin,
+      instagram: cleanText(instagram) || existing.instagram,
+      facebook: cleanText(facebook) || existing.facebook,
+      whatsapp: cleanText(whatsapp) || existing.whatsapp,
+      rawText: cleanText(rawText) || existing.rawText,
+      cardImageUrl: cleanText(cardImageUrl) || existing.cardImageUrl,
+      localImagePath: cleanText(localImagePath) || existing.localImagePath,
+      scannedCardId: savedCard._id,
+      source: existing.source || "network",
+    };
+
+    const updatedConnection = await Connection.findByIdAndUpdate(
+      existing._id,
+      updateData,
+      { new: true }
+    );
+
+    await Interaction.create({
+      userEmail: ownerEmail,
+      connectionPhone:
+        updatedConnection.interactionKey ||
+        updatedConnection.connectionPhone ||
+        cleanedPhone,
+      type: "Note",
+      title: "Contact updated from scanned business card",
+      description: "Existing Network contact updated using OCR card details",
+      interactionDate: new Date(),
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Existing network contact updated successfully",
+      scannedCard: savedCard,
+      contact: updatedConnection,
+    });
+  } catch (error) {
+    console.error("Update existing network contact error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update existing network contact",
+      error: error.message,
+    });
+  }
+});
+
 
 
 

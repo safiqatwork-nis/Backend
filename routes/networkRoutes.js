@@ -40,6 +40,10 @@ const contactPayload = (contact, profile = null) => ({
   cardImageUrl: contact.cardImageUrl || "",
   localImagePath: contact.localImagePath || "",
   scannedCardId: contact.scannedCardId || null,
+  linkedin: contact.linkedin || "",
+instagram: contact.instagram || "",
+facebook: contact.facebook || "",
+whatsapp: contact.whatsapp || "",
   profile,
 });
 

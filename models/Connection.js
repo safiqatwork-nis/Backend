@@ -15,6 +15,11 @@ const connectionSchema = new mongoose.Schema(
     location: { type: String, default: "" },
     googleMapLocation: { type: String, default: "" },
 
+    linkedin: { type: String, default: "" },
+instagram: { type: String, default: "" },
+facebook: { type: String, default: "" },
+whatsapp: { type: String, default: "" },
+
     category: {
       type: String,
       enum: ["Investor", "Mentor", "Partner", "Customer", "Vendor", "Peer"],

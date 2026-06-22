@@ -76,6 +76,30 @@ const scannedCardSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    
+    linkedin: {
+  type: String,
+  trim: true,
+  default: "",
+},
+
+instagram: {
+  type: String,
+  trim: true,
+  default: "",
+},
+
+facebook: {
+  type: String,
+  trim: true,
+  default: "",
+},
+
+whatsapp: {
+  type: String,
+  trim: true,
+  default: "",
+},
   },
   { timestamps: true }
 );
