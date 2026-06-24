@@ -10,6 +10,7 @@ const googleRoutes = require("./routes/googleRoutes");
 const eventRoutes = require("./routes/eventRoutes");
 const networkRoutes = require("./routes/networkRoutes");
 const scannedCardRoutes = require("./routes/scannedCardRoutes");
+const liveMapRoutes = require("./routes/liveMapRoutes");
 
 
 const app = express();
@@ -30,6 +31,7 @@ app.use("/api/calendar", calendarRoutes);
 app.use("/api/google", googleRoutes);
 app.use("/api/network", networkRoutes);
 app.use("/api/scanned-cards", scannedCardRoutes);
+app.use("/api/live-map", liveMapRoutes);
 
 mongoose.connect(process.env.MONGO_URI)
 .then(() => {
