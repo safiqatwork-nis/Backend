@@ -11,6 +11,9 @@ const eventRoutes = require("./routes/eventRoutes");
 const networkRoutes = require("./routes/networkRoutes");
 const scannedCardRoutes = require("./routes/scannedCardRoutes");
 const liveMapRoutes = require("./routes/liveMapRoutes");
+const http = require("http");
+const { Server } = require("socket.io");
+const initLiveMapSocket = require("./socket/liveMapSocket");
 
 
 const app = express();
@@ -39,9 +42,22 @@ mongoose.connect(process.env.MONGO_URI)
 
   const PORT = process.env.PORT || 5001;
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE"],
+  },
 });
+
+initLiveMapSocket(io);
+
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
+
+
 })
 .catch((err) => {
     console.log(err);
