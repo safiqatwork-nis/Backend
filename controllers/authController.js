@@ -6,7 +6,7 @@ const nodemailer = require("nodemailer");
 const { OAuth2Client } = require("google-auth-library");
 const appleSignin = require("apple-signin-auth");
 
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+const googleClient = new OAuth2Client(process.env.GOOGLE_AUTH_CLIENT_ID);
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -158,7 +158,7 @@ const googleAuth = async (req, res) => {
 
     const ticket = await googleClient.verifyIdToken({
       idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
+      audience: process.env.GOOGLE_AUTH_CLIENT_ID,
     });
 
     const payload = ticket.getPayload();
