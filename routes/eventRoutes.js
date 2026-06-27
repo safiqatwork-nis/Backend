@@ -17,8 +17,8 @@ const BASE_URL = process.env.BASE_URL || "https://my-biz-backend.onrender.com";
 
 function createOAuthClient() {
   return new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_CALENDAR_CLIENT_ID,
+    process.env.GOOGLE_CALENDAR_CLIENT_SECRET,
     process.env.GOOGLE_REDIRECT_URI
   );
 }
