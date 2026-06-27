@@ -20,4 +20,12 @@ router.post("/apple", appleAuth);
 router.post("/forgot-password", forgotPassword);
 router.post("/reset-password", resetPassword);
 
+router.post("/apple/callback", (req, res) => {
+  res.send("Apple callback received");
+});
+
+router.get("/apple/callback", (req, res) => {
+  res.send("Apple callback received");
+});
+
 module.exports = router;
