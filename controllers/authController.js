@@ -364,4 +364,6 @@ module.exports = {
   appleAuth,
   forgotPassword,
   resetPassword,
+  changePassword,
+
 };
