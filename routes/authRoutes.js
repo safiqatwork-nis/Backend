@@ -12,12 +12,12 @@ const {
 
 const { protect } = require("../middleware/authMiddleware");
 const {
-  requireFirebaseEmailVerification,
+  requireFirebasePhoneVerification,
 } = require("../middleware/firebaseAuthMiddleware");
 
 const router = express.Router();
 
-router.post("/register", requireFirebaseEmailVerification, registerUser);
+router.post("/register", requireFirebasePhoneVerification, registerUser);
 router.post("/login", loginUser);
 
 router.post("/google", googleAuth);
@@ -26,7 +26,7 @@ router.post("/apple", appleAuth);
 router.post("/forgot-password", forgotPassword);
 router.post(
   "/reset-password",
-  requireFirebaseEmailVerification,
+  requireFirebasePhoneVerification,
   resetPassword,
 );
 router.post("/change-password", protect, changePassword);

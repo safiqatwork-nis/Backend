@@ -1,36 +1,35 @@
 const { verifyFirebaseIdToken } = require("../config/firebaseAdmin");
 
 const MAX_AUTH_AGE_SECONDS = 10 * 60;
-const EMAIL_LINK_PROVIDERS = new Set(["password", "emailLink"]);
+const normalizePhone = (phone) => String(phone || "").replace(/[\s()-]/g, "");
 
-const requireFirebaseEmailVerification = async (req, res, next) => {
+const requireFirebasePhoneVerification = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({
-        message: "Firebase email verification is required",
+        message: "Firebase phone verification is required",
       });
     }
 
     const idToken = authHeader.slice("Bearer ".length).trim();
     const decodedToken = await verifyFirebaseIdToken(idToken);
-    const tokenEmail = decodedToken.email?.trim().toLowerCase();
-    const requestEmail = req.body.email?.trim().toLowerCase();
+    const tokenPhone = normalizePhone(decodedToken.phone_number);
+    const requestPhone = normalizePhone(req.body.phone);
     const signInProvider = decodedToken.firebase?.sign_in_provider;
     const authAge = Math.floor(Date.now() / 1000) - decodedToken.auth_time;
 
     if (
-      !tokenEmail ||
-      decodedToken.email_verified !== true ||
-      tokenEmail !== requestEmail ||
-      !EMAIL_LINK_PROVIDERS.has(signInProvider) ||
+      !tokenPhone ||
+      tokenPhone !== requestPhone ||
+      signInProvider !== "phone" ||
       !Number.isFinite(authAge) ||
       authAge < 0 ||
       authAge > MAX_AUTH_AGE_SECONDS
     ) {
       return res.status(401).json({
-        message: "Firebase email verification is invalid or expired",
+        message: "Firebase phone verification is invalid or expired",
       });
     }
 
@@ -44,9 +43,9 @@ const requireFirebaseEmailVerification = async (req, res, next) => {
     }
 
     return res.status(401).json({
-      message: "Firebase email verification is invalid or expired",
+      message: "Firebase phone verification is invalid or expired",
     });
   }
 };
 
-module.exports = { requireFirebaseEmailVerification };
+module.exports = { requireFirebasePhoneVerification };

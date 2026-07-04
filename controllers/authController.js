@@ -13,6 +13,8 @@ const generateToken = (id) => {
 };
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const phoneRegex = /^\+[1-9]\d{7,14}$/;
+const normalizePhone = (phone) => String(phone || "").replace(/[\s()-]/g, "");
 
 const sendResponse = (res, status, message, user) => {
   res.status(status).json({
@@ -89,12 +91,13 @@ const validatePassword = (password) => {
 
 const registerUser = async (req, res) => {
   try {
-    let { name, email, password } = req.body;
+    let { name, email, phone, password } = req.body;
 
     name = name?.trim();
     email = email?.trim().toLowerCase();
+    phone = normalizePhone(phone);
 
-    if (!name || !email || !password) {
+    if (!name || !email || !phone || !password) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
@@ -106,15 +109,26 @@ const registerUser = async (req, res) => {
       return res.status(400).json({ message: "Enter a valid email address" });
     }
 
+    if (!phoneRegex.test(phone)) {
+      return res.status(400).json({
+        message: "Enter a valid phone number with country code",
+      });
+    }
+
     const passwordError = validatePassword(password);
     if (passwordError) {
       return res.status(400).json({ message: passwordError });
     }
 
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ $or: [{ email }, { phone }] });
 
     if (existingUser) {
-      return res.status(400).json({ message: "User already exists" });
+      return res.status(400).json({
+        message:
+          existingUser.email === email
+            ? "User already exists"
+            : "Phone number is already registered",
+      });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -122,6 +136,7 @@ const registerUser = async (req, res) => {
     const user = await User.create({
       name,
       email,
+      phone,
       password: hashedPassword,
       authProvider: "email",
     });
@@ -251,28 +266,37 @@ const appleAuth = async (req, res) => {
 
 const forgotPassword = async (req, res) => {
   try {
-    let { email } = req.body;
+    let { email, phone } = req.body;
 
     email = email?.trim().toLowerCase();
+    phone = normalizePhone(phone);
 
-    if (!email) {
-      return res.status(400).json({ message: "Email is required" });
+    if (!email || !phone) {
+      return res.status(400).json({
+        message: "Email and phone number are required",
+      });
     }
 
     if (!emailRegex.test(email)) {
       return res.status(400).json({ message: "Enter a valid email address" });
     }
 
-    const user = await User.findOne({ email });
+    if (!phoneRegex.test(phone)) {
+      return res.status(400).json({
+        message: "Enter a valid phone number with country code",
+      });
+    }
+
+    const user = await User.findOne({ email, phone });
 
     if (!user || user.authProvider !== "email") {
       return res.status(404).json({
-        message: "No email-password account found with this email",
+        message: "Email and registered phone number do not match",
       });
     }
 
     res.status(200).json({
-      message: "Email account confirmed. Continue with Firebase verification",
+      message: "Account confirmed. Continue with Firebase phone verification",
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -281,13 +305,14 @@ const forgotPassword = async (req, res) => {
 
 const resetPassword = async (req, res) => {
   try {
-    let { email, newPassword } = req.body;
+    let { email, phone, newPassword } = req.body;
 
     email = email?.trim().toLowerCase();
+    phone = normalizePhone(phone);
 
-    if (!email || !newPassword) {
+    if (!email || !phone || !newPassword) {
       return res.status(400).json({
-        message: "Email and new password are required",
+        message: "Email, phone number and new password are required",
       });
     }
 
@@ -296,11 +321,11 @@ const resetPassword = async (req, res) => {
       return res.status(400).json({ message: passwordError });
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email, phone });
 
     if (!user || user.authProvider !== "email") {
       return res.status(404).json({
-        message: "No email-password account found with this email",
+        message: "Email and registered phone number do not match",
       });
     }
 
