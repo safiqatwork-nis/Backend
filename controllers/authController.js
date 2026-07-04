@@ -1,8 +1,6 @@
 const User = require("../models/User");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const crypto = require("crypto");
-const nodemailer = require("nodemailer");
 const { OAuth2Client } = require("google-auth-library");
 const appleSignin = require("apple-signin-auth");
 
@@ -87,28 +85,6 @@ const validatePassword = (password) => {
   }
 
   return null;
-};
-
-const sendResetOtpEmail = async (email, otp) => {
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
-
-  await transporter.sendMail({
-    from: `"MyBiz" <${process.env.EMAIL_USER}>`,
-    to: email,
-    subject: "MyBiz Password Reset OTP",
-    html: `
-      <h2>Password Reset OTP</h2>
-      <p>Your MyBiz password reset OTP is:</p>
-      <h1>${otp}</h1>
-      <p>This OTP is valid for 10 minutes.</p>
-    `,
-  });
 };
 
 const registerUser = async (req, res) => {
@@ -295,16 +271,8 @@ const forgotPassword = async (req, res) => {
       });
     }
 
-    const otp = crypto.randomInt(100000, 999999).toString();
-
-    user.resetOtp = await bcrypt.hash(otp, 10);
-    user.resetOtpExpires = new Date(Date.now() + 10 * 60 * 1000);
-    await user.save();
-
-    await sendResetOtpEmail(email, otp);
-
     res.status(200).json({
-      message: "Password reset OTP sent to your email",
+      message: "Email account confirmed. Continue with Firebase verification",
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -313,13 +281,13 @@ const forgotPassword = async (req, res) => {
 
 const resetPassword = async (req, res) => {
   try {
-    let { email, otp, newPassword } = req.body;
+    let { email, newPassword } = req.body;
 
     email = email?.trim().toLowerCase();
 
-    if (!email || !otp || !newPassword) {
+    if (!email || !newPassword) {
       return res.status(400).json({
-        message: "Email, OTP and new password are required",
+        message: "Email and new password are required",
       });
     }
 
@@ -330,18 +298,10 @@ const resetPassword = async (req, res) => {
 
     const user = await User.findOne({ email });
 
-    if (!user || !user.resetOtp || !user.resetOtpExpires) {
-      return res.status(400).json({ message: "Invalid reset request" });
-    }
-
-    if (user.resetOtpExpires < new Date()) {
-      return res.status(400).json({ message: "OTP expired" });
-    }
-
-    const isOtpValid = await bcrypt.compare(otp, user.resetOtp);
-
-    if (!isOtpValid) {
-      return res.status(400).json({ message: "Invalid OTP" });
+    if (!user || user.authProvider !== "email") {
+      return res.status(404).json({
+        message: "No email-password account found with this email",
+      });
     }
 
     user.password = await bcrypt.hash(newPassword, 10);

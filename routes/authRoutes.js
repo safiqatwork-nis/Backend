@@ -11,17 +11,24 @@ const {
 } = require("../controllers/authController");
 
 const { protect } = require("../middleware/authMiddleware");
+const {
+  requireFirebaseEmailVerification,
+} = require("../middleware/firebaseAuthMiddleware");
 
 const router = express.Router();
 
-router.post("/register", registerUser);
+router.post("/register", requireFirebaseEmailVerification, registerUser);
 router.post("/login", loginUser);
 
 router.post("/google", googleAuth);
 router.post("/apple", appleAuth);
 
 router.post("/forgot-password", forgotPassword);
-router.post("/reset-password", resetPassword);
+router.post(
+  "/reset-password",
+  requireFirebaseEmailVerification,
+  resetPassword,
+);
 router.post("/change-password", protect, changePassword);
 
 router.post("/apple/callback", (req, res) => {
