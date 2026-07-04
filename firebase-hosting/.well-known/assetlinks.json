@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.brandmindz.my_biz",
+      "sha256_cert_fingerprints": [
+        "52:1C:0E:BF:16:79:DF:F2:43:22:43:F9:6D:F2:17:82:16:86:60:2F:C7:A0:E9:51:F3:38:B2:D5:ED:26:A1:03"
+      ]
+    }
+  }
+]
