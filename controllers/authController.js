@@ -1,6 +1,8 @@
 const User = require("../models/User");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
+const tls = require("tls");
 const { OAuth2Client } = require("google-auth-library");
 const appleSignin = require("apple-signin-auth");
 
@@ -29,7 +31,93 @@ const sendResponse = (res, status, message, user) => {
   });
 };
 
-const changePassword = async (req, res) => {
+const readSmtpResponse = (socket) =>
+  new Promise((resolve, reject) => {
+    let response = "";
+
+    const onData = (data) => {
+      response += data.toString();
+      const lines = response.split("\r\n").filter(Boolean);
+      const lastLine = lines[lines.length - 1] || "";
+
+      if (/^\d{3} /.test(lastLine)) {
+        cleanup();
+        resolve({ code: Number(lastLine.slice(0, 3)), response });
+      }
+    };
+    const onError = (error) => {
+      cleanup();
+      reject(error);
+    };
+    const cleanup = () => {
+      socket.off("data", onData);
+      socket.off("error", onError);
+    };
+
+    socket.on("data", onData);
+    socket.on("error", onError);
+  });
+
+const sendSmtpCommand = async (socket, command, validCodes) => {
+  const responsePromise = readSmtpResponse(socket);
+  socket.write(`${command}\r\n`);
+  const result = await responsePromise;
+
+  if (!validCodes.includes(result.code)) {
+    throw new Error(`Email server rejected the request (${result.code})`);
+  }
+};
+
+const sendChangePasswordOtpEmail = async (email, otp) => {
+  const emailUser = process.env.EMAIL_USER;
+  const emailPass = process.env.EMAIL_PASS?.replace(/\s/g, "");
+
+  if (!emailUser || !emailPass) {
+    throw new Error("Email service is not configured");
+  }
+
+  const socket = tls.connect({ host: "smtp.gmail.com", port: 465 });
+
+  try {
+    const greeting = await readSmtpResponse(socket);
+    if (greeting.code !== 220) throw new Error("Email server is unavailable");
+
+    await sendSmtpCommand(socket, "EHLO mybiz", [250]);
+    await sendSmtpCommand(socket, "AUTH LOGIN", [334]);
+    await sendSmtpCommand(
+      socket,
+      Buffer.from(emailUser).toString("base64"),
+      [334],
+    );
+    await sendSmtpCommand(
+      socket,
+      Buffer.from(emailPass).toString("base64"),
+      [235],
+    );
+    await sendSmtpCommand(socket, `MAIL FROM:<${emailUser}>`, [250]);
+    await sendSmtpCommand(socket, `RCPT TO:<${email}>`, [250, 251]);
+    await sendSmtpCommand(socket, "DATA", [354]);
+
+    const message = [
+      `From: MyBiz <${emailUser}>`,
+      `To: ${email}`,
+      "Subject: MyBiz change password OTP",
+      "MIME-Version: 1.0",
+      "Content-Type: text/plain; charset=UTF-8",
+      "",
+      `Your OTP to change your MyBiz password is ${otp}.`,
+      "This OTP expires in 10 minutes.",
+      "If you did not request this, you can ignore this email.",
+    ].join("\r\n");
+
+    await sendSmtpCommand(socket, `${message}\r\n.`, [250]);
+    await sendSmtpCommand(socket, "QUIT", [221]);
+  } finally {
+    socket.destroy();
+  }
+};
+
+const sendChangePasswordOtp = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
 
@@ -58,12 +146,82 @@ const changePassword = async (req, res) => {
       return res.status(400).json({ message: "Current password is incorrect" });
     }
 
-    user.password = await bcrypt.hash(newPassword, 10);
+    const isSamePassword = await bcrypt.compare(newPassword, user.password);
+    if (isSamePassword) {
+      return res.status(400).json({
+        message: "New password must be different from current password",
+      });
+    }
+
+    const otp = crypto.randomInt(100000, 1000000).toString();
+    const [hashedOtp, pendingNewPasswordHash] = await Promise.all([
+      bcrypt.hash(otp, 10),
+      bcrypt.hash(newPassword, 10),
+    ]);
+
+    await sendChangePasswordOtpEmail(user.email, otp);
+
+    user.changePasswordOtp = hashedOtp;
+    user.changePasswordOtpExpires = new Date(Date.now() + 10 * 60 * 1000);
+    user.pendingNewPasswordHash = pendingNewPasswordHash;
     await user.save();
 
     res.status(200).json({
-      message: "Password changed successfully",
+      message: "OTP sent to your email",
     });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const verifyChangePasswordOtp = async (req, res) => {
+  try {
+    const { otp } = req.body;
+
+    if (!otp) {
+      return res.status(400).json({ message: "OTP is required" });
+    }
+
+    if (!/^\d{6}$/.test(String(otp))) {
+      return res.status(400).json({ message: "Enter a valid 6-digit OTP" });
+    }
+
+    const user = await User.findById(req.user._id);
+
+    if (!user || user.authProvider !== "email") {
+      return res.status(400).json({
+        message: "Password change is only available for email login accounts",
+      });
+    }
+
+    if (
+      !user.changePasswordOtp ||
+      !user.changePasswordOtpExpires ||
+      !user.pendingNewPasswordHash
+    ) {
+      return res.status(400).json({ message: "Request a new OTP first" });
+    }
+
+    if (user.changePasswordOtpExpires.getTime() <= Date.now()) {
+      user.changePasswordOtp = null;
+      user.changePasswordOtpExpires = null;
+      user.pendingNewPasswordHash = null;
+      await user.save();
+      return res.status(400).json({ message: "OTP has expired" });
+    }
+
+    const isOtpValid = await bcrypt.compare(String(otp), user.changePasswordOtp);
+    if (!isOtpValid) {
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
+    user.password = user.pendingNewPasswordHash;
+    user.changePasswordOtp = null;
+    user.changePasswordOtpExpires = null;
+    user.pendingNewPasswordHash = null;
+    await user.save();
+
+    res.status(200).json({ message: "Password changed successfully" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -349,6 +507,7 @@ module.exports = {
   appleAuth,
   forgotPassword,
   resetPassword,
-  changePassword,
+  sendChangePasswordOtp,
+  verifyChangePasswordOtp,
 
 };

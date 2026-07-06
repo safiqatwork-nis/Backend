@@ -55,6 +55,21 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    changePasswordOtp: {
+      type: String,
+      default: null,
+    },
+
+    changePasswordOtpExpires: {
+      type: Date,
+      default: null,
+    },
+
+    pendingNewPasswordHash: {
+      type: String,
+      default: null,
+    },
   },
   {
     timestamps: true,

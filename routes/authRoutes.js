@@ -7,7 +7,8 @@ const {
   appleAuth,
   forgotPassword,
   resetPassword,
-  changePassword,
+  sendChangePasswordOtp,
+  verifyChangePasswordOtp,
 } = require("../controllers/authController");
 
 const { protect } = require("../middleware/authMiddleware");
@@ -29,7 +30,8 @@ router.post(
   requireFirebasePhoneVerification,
   resetPassword,
 );
-router.post("/change-password", protect, changePassword);
+router.post("/change-password/send-otp", protect, sendChangePasswordOtp);
+router.post("/change-password/verify", protect, verifyChangePasswordOtp);
 
 router.post("/apple/callback", (req, res) => {
   res.send("Apple callback received");
