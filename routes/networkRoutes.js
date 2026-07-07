@@ -9,43 +9,96 @@ const IntroductionRequest = require("../models/IntroductionRequest");
 const router = express.Router();
 
 const normalizePhone = (value = "") => String(value).replace(/\D/g, "");
+const normalizeEmail = (value = "") => String(value).trim().toLowerCase();
 const escapeRegex = (value = "") =>
   String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const escapeCsv = (value = "") => `"${String(value).replace(/"/g, '""')}"`;
 
-const contactPayload = (contact, profile = null) => ({
-  _id: contact._id,
-  userEmail: contact.userEmail,
-  connectionName: contact.connectionName || profile?.name || "",
-  connectionPhone: contact.connectionPhone || profile?.phone || "",
-  connectionEmail: contact.connectionEmail || profile?.email || "",
-  interactionKey:
-    contact.interactionKey || contact.connectionPhone || profile?.phone || "",
-  businessName: contact.businessName || profile?.companyName || "",
-  businessCategory: contact.businessCategory || profile?.industry || "",
-  businessLogo:
-    contact.businessLogo || profile?.businessLogo || profile?.profileImage || "",
-  location: contact.location || profile?.location || "",
-  googleMapLocation:
-    contact.googleMapLocation || profile?.googleMapLocation || "",
-  category: contact.category || "Peer",
-  tier: contact.tier || "1st",
-  notes: contact.notes || "",
-  relationshipStrength: contact.relationshipStrength ?? 20,
-  source: contact.source || "network",
-  contactType: contact.contactType || "app_user",
-  jobTitle: contact.jobTitle || "",
-  website: contact.website || "",
-  rawText: contact.rawText || "",
-  cardImageUrl: contact.cardImageUrl || "",
-  localImagePath: contact.localImagePath || "",
-  scannedCardId: contact.scannedCardId || null,
-  linkedin: contact.linkedin || "",
-instagram: contact.instagram || "",
-facebook: contact.facebook || "",
-whatsapp: contact.whatsapp || "",
-  profile,
-});
+const findUserProfileByContact = async ({ email = "", phone = "" }) => {
+  const normalizedEmail = normalizeEmail(email);
+  const normalizedPhone = normalizePhone(phone);
+  const query = [];
+
+  if (normalizedEmail) {
+    query.push({ email: new RegExp(`^${escapeRegex(normalizedEmail)}$`, "i") });
+  }
+
+  if (normalizedPhone) {
+    query.push({
+      phone: {
+        $regex: normalizedPhone.split("").join("\\D*"),
+        $options: "i",
+      },
+    });
+  }
+
+  if (query.length === 0) return null;
+
+  const profiles = await UserProfile.find({ $or: query }).limit(10);
+  return (
+    profiles.find((profile) => normalizeEmail(profile.email) === normalizedEmail) ||
+    profiles.find((profile) => normalizePhone(profile.phone) === normalizedPhone) ||
+    null
+  );
+};
+
+const contactPayload = (contact, profile = null) => {
+  const isNetwork =
+    contact.isAppUser === true || contact.contactType === "network" || !!profile;
+  const linkedUserEmail = isNetwork
+    ? contact.linkedUserEmail || profile?.email || contact.connectionEmail || ""
+    : "";
+
+  return {
+    _id: contact._id,
+    userEmail: contact.userEmail,
+    connectionName: isNetwork
+      ? profile?.name || contact.connectionName || ""
+      : contact.connectionName || "",
+    connectionPhone: isNetwork
+      ? profile?.phone || contact.connectionPhone || ""
+      : contact.connectionPhone || "",
+    connectionEmail: isNetwork
+      ? profile?.email || contact.connectionEmail || ""
+      : contact.connectionEmail || "",
+    interactionKey:
+      contact.interactionKey || contact.connectionPhone || profile?.phone || "",
+    businessName: isNetwork
+      ? profile?.companyName || contact.businessName || ""
+      : contact.businessName || "",
+    businessCategory: isNetwork
+      ? profile?.industry || contact.businessCategory || ""
+      : contact.businessCategory || "",
+    businessLogo: isNetwork
+      ? profile?.businessLogo || profile?.profileImage || contact.businessLogo || ""
+      : contact.businessLogo || "",
+    location: isNetwork
+      ? profile?.location || contact.location || ""
+      : contact.location || "",
+    googleMapLocation: isNetwork
+      ? profile?.googleMapLocation || contact.googleMapLocation || ""
+      : contact.googleMapLocation || "",
+    category: contact.category || "Peer",
+    tier: contact.tier || "1st",
+    notes: contact.notes || "",
+    relationshipStrength: contact.relationshipStrength ?? 20,
+    source: contact.source || "network",
+    isAppUser: isNetwork,
+    contactType: isNetwork ? "network" : "contact",
+    linkedUserEmail,
+    jobTitle: contact.jobTitle || "",
+    website: contact.website || "",
+    rawText: contact.rawText || "",
+    cardImageUrl: contact.cardImageUrl || "",
+    localImagePath: contact.localImagePath || "",
+    scannedCardId: contact.scannedCardId || null,
+    linkedin: contact.linkedin || "",
+    instagram: contact.instagram || "",
+    facebook: contact.facebook || "",
+    whatsapp: contact.whatsapp || "",
+    profile,
+  };
+};
 
 const profilePayload = (profile) => ({
   _id: profile._id,
@@ -64,7 +117,9 @@ const profilePayload = (profile) => ({
   notes: "",
   relationshipStrength: 20,
   source: "network",
-  contactType: "app_user",
+  isAppUser: true,
+  contactType: "network",
+  linkedUserEmail: profile.email || "",
   profile,
 });
 
@@ -286,6 +341,9 @@ router.post("/request/accept", async (req, res) => {
         category: category || "Peer",
         tier: "1st",
         relationshipStrength: 30,
+        isAppUser: true,
+        contactType: "network",
+        linkedUserEmail: request.toEmail,
       },
       { new: true, upsert: true }
     );
@@ -309,6 +367,9 @@ router.post("/request/accept", async (req, res) => {
         category: category || "Peer",
         tier: "1st",
         relationshipStrength: 30,
+        isAppUser: true,
+        contactType: "network",
+        linkedUserEmail: request.fromEmail,
       },
       { new: true, upsert: true }
     );
@@ -364,9 +425,10 @@ router.get("/connections/:email", async (req, res) => {
 
     const result = await Promise.all(
       connections.map(async (item) => {
-        const profile = item.connectionEmail
-          ? await UserProfile.findOne({ email: item.connectionEmail })
-          : null;
+        const profile = await findUserProfileByContact({
+          email: item.linkedUserEmail || item.connectionEmail,
+          phone: item.connectionPhone,
+        });
 
         return contactPayload(item, profile);
       })
@@ -471,6 +533,12 @@ router.post("/contact/update", async (req, res) => {
       });
     }
 
+    const matchedProfile = await findUserProfileByContact({
+      email: connectionEmail,
+      phone: connectionPhone,
+    });
+    const isAppUser = !!matchedProfile;
+
     const contact = await Connection.findOneAndUpdate(
       {
         userEmail,
@@ -481,17 +549,26 @@ router.post("/contact/update", async (req, res) => {
         ],
       },
       {
-        connectionName,
-        connectionPhone,
-        connectionEmail,
-        interactionKey: connectionPhone,
-        businessName,
-        businessCategory,
-        businessLogo: businessLogo || "",
-        location,
-        googleMapLocation: googleMapLocation || "",
+        connectionName: isAppUser ? matchedProfile.name || connectionName : connectionName,
+        connectionPhone: isAppUser ? matchedProfile.phone || connectionPhone : connectionPhone,
+        connectionEmail: isAppUser
+          ? matchedProfile.email || connectionEmail || ""
+          : connectionEmail,
+        interactionKey: isAppUser ? matchedProfile.phone || connectionPhone : connectionPhone,
+        businessName: isAppUser ? matchedProfile.companyName || "" : businessName,
+        businessCategory: isAppUser ? matchedProfile.industry || "" : businessCategory,
+        businessLogo: isAppUser
+          ? matchedProfile.businessLogo || matchedProfile.profileImage || ""
+          : businessLogo || "",
+        location: isAppUser ? matchedProfile.location || "" : location,
+        googleMapLocation: isAppUser
+          ? matchedProfile.googleMapLocation || ""
+          : googleMapLocation || "",
         category,
         notes,
+        isAppUser,
+        contactType: isAppUser ? "network" : "contact",
+        linkedUserEmail: isAppUser ? matchedProfile.email || "" : "",
       },
       { new: true }
     );
@@ -513,7 +590,7 @@ router.post("/contact/update", async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Contact updated successfully",
-      contact: contactPayload(contact),
+      contact: contactPayload(contact, matchedProfile),
     });
   } catch (error) {
     res.status(500).json({
@@ -823,6 +900,11 @@ router.get("/discover/search", async (req, res) => {
         .map((c) => normalizePhone(c.connectionPhone))
         .filter(Boolean)
     );
+    const savedEmails = new Set(
+      myContacts
+        .map((c) => normalizeEmail(c.linkedUserEmail || c.connectionEmail))
+        .filter(Boolean)
+    );
 
     const escapedKeyword = escapeRegex(keyword);
     const escapedLocation = escapeRegex(location);
@@ -888,6 +970,7 @@ router.get("/discover/search", async (req, res) => {
       if (!textMatches || !locationMatches) continue;
       if (!normalized) continue;
       if (savedPhones.has(normalized)) continue;
+      if (savedEmails.has(normalizeEmail(item.connectionEmail))) continue;
       if (seenPhones.has(normalized)) continue;
 
       seenPhones.add(normalized);
@@ -1118,26 +1201,42 @@ router.post("/contact/add", async (req, res) => {
       });
     }
 
+    const matchedProfile = await findUserProfileByContact({
+      email: connectionEmail,
+      phone: connectionPhone,
+    });
+    const isAppUser = !!matchedProfile;
+
     const contact = await Connection.create({
       userEmail,
-      connectionName,
-      connectionPhone,
-      connectionEmail: connectionEmail || "",
-      businessName: businessName || "",
-      businessCategory: businessCategory || "",
-      businessLogo: businessLogo || "",
-      location: location || "",
-      googleMapLocation: googleMapLocation || "",
+      connectionName: isAppUser ? matchedProfile.name || connectionName : connectionName,
+      connectionPhone: isAppUser ? matchedProfile.phone || connectionPhone : connectionPhone,
+      connectionEmail: isAppUser
+        ? matchedProfile.email || connectionEmail || ""
+        : connectionEmail || "",
+      interactionKey: isAppUser ? matchedProfile.phone || connectionPhone : connectionPhone,
+      businessName: isAppUser ? matchedProfile.companyName || "" : businessName || "",
+      businessCategory: isAppUser ? matchedProfile.industry || "" : businessCategory || "",
+      businessLogo: isAppUser
+        ? matchedProfile.businessLogo || matchedProfile.profileImage || ""
+        : businessLogo || "",
+      location: isAppUser ? matchedProfile.location || "" : location || "",
+      googleMapLocation: isAppUser
+        ? matchedProfile.googleMapLocation || ""
+        : googleMapLocation || "",
       category: category || "Peer",
       notes: notes || "",
       tier: "1st",
       relationshipStrength: 20,
+      isAppUser,
+      contactType: isAppUser ? "network" : "contact",
+      linkedUserEmail: isAppUser ? matchedProfile.email || "" : "",
     });
 
     res.status(201).json({
       success: true,
       message: "Contact added successfully",
-      contact,
+      contact: contactPayload(contact, matchedProfile),
     });
   } catch (error) {
     res.status(500).json({
